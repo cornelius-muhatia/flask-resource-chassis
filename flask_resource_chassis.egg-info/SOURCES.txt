@@ -1,0 +1,8 @@
+README.md
+setup.cfg
+setup.py
+flask_resource_chassis.egg-info/PKG-INFO
+flask_resource_chassis.egg-info/SOURCES.txt
+flask_resource_chassis.egg-info/dependency_links.txt
+flask_resource_chassis.egg-info/top_level.txt
+flask_resource_chassis.egg-info/zip-safe

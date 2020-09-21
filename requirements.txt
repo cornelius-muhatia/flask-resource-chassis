@@ -1,1 +1,6 @@
 flask-apispec
+marshmallow-sqlalchemy
+Flask-SQLAlchemy
+flask-marshmallow
+pytest
+Authlib
