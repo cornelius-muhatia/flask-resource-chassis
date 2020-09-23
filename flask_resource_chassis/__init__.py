@@ -9,17 +9,37 @@ from .exceptions import ConflictError, ValidationError
 from .schemas import ResponseWrapper, DjangoPageSchema, error_response, val_error_response
 from .services import ChassisService, LoggerService, get_primary_key
 from authlib.oauth2.rfc6749 import TokenMixin
+from authlib.oauth2.rfc6750 import InsufficientScopeError, InvalidTokenError
+
+from .utils import CustomResourceProtector
 
 
-class ForeignRef:
-    def __init__(self, field, rel_field, clazz, record_name=None):
-        self.field = field
-        self.rel_field = rel_field
-        self.clazz = clazz
-        if record_name:
-            self.record_name = record_name
-        else:
-            self.record_name = clazz.__name__
+class Scope:
+
+    def __init__(self, scopes=None, operator=None):
+        self.scopes = scopes
+        self.operator = operator
+
+
+def authenticate(resource_protector, scope=None, permissions=None):
+    """
+    Used to authenticate request using CustomResourceProtector
+
+    :param resource_protector: CustomResourceProtector
+    :param scope: Scope with scopes string and operator (And/Or)::
+
+        Scope(scopes="resource.create resource.read", operator="Or")
+
+    :param permissions: A list of permission tags
+    """
+    scope_ = scope.scopes if scope else None
+    operator = scope.operator if scope and scope.operator else "AND"
+
+    @resource_protector(scope=scope_, operator=operator, has_any_authority=permissions)
+    def authenticate_(*args, **kwargs):
+        return args[0]
+
+    return authenticate_()
 
 
 def validate_foreign_keys(model, db):
@@ -89,7 +109,15 @@ class ChassisResourceList(MethodResource):
     response_schema = Schema.from_dict(dict())
     page_response_schema = Schema.from_dict(dict())
 
-    def __init__(self, app, db, schema, record_name=None, logger_service: LoggerService = None):
+    def __init__(self, app, db, schema, record_name=None, logger_service: LoggerService = None,
+                 resource_protector: CustomResourceProtector = None, create_scope: Scope = None,
+                 fetch_scope: Scope = None, create_permissions=None, fetch_permissions=None):
+        """
+
+        :param app: Flask application reference
+        :param db: Flask SQLAlchemy reference
+        :param schema: Current model Marshmallow Schema with model reference
+        """
         self.app = app
         self.service = ChassisService(app, db, schema.Meta.model)
         self.db = db
@@ -109,11 +137,20 @@ class ChassisResourceList(MethodResource):
         self.response_schema = ResponseSchema()
         self.page_response_schema = RecordPageSchema()
         self.logger_service = logger_service
+        self.resource_protector = resource_protector
+        self.create_scopes = create_scope
+        self.fetch_scopes = fetch_scope
+        self.create_permissions = create_permissions
+        self.fetch_permissions = fetch_permissions
 
     @marshal_with(Ref("response_schema"), code=201, description="Request processed successfully")
     @use_kwargs(Ref('schema'))
     def post(self, payload=None):
         self.app.logger.info("Creating new %s. Payload: %s", self.record_name, str(payload))
+        token = None
+        if self.resource_protector:
+            self.app.logger.debug("Resource protector is present handling authorization")
+            token = authenticate(self.resource_protector, self.create_scopes, self.create_permissions)
         # Validating foreign keys and unique constraints
         try:
             validate_foreign_keys(payload, self.db)
@@ -122,12 +159,12 @@ class ChassisResourceList(MethodResource):
             self.app.logger.debug(f"Failed to create entity {self.record_name}. {ex.message}")
             if self.logger_service:
                 self.logger_service.log_failed_creation(f"Failed to create {self.record_name}. {ex.message}",
-                                                        payload.__class__)
+                                                        payload.__class__, token=token)
             return {"message": ex.message}, 400
         self.service.create(payload)
         if self.logger_service:
             self.logger_service.log_success_creation(f"Created {self.record_name} successfully", payload.__class__,
-                                                     payload.id)
+                                                     payload.id, token=token)
         return {"message": "Request was successful", "data": payload}, 201
 
     # @require_oauth(has_any_authority=["view_area", "add_area", "change_area"])
@@ -153,6 +190,9 @@ class ChassisResourceList(MethodResource):
         if page is None:
             page = 1
         self.app.logger.info(f"Fetching {self.record_name}: Request size %s, page %s", page_size, page)
+        if self.resource_protector:
+            self.app.logger.debug("Resource protector is present handling authorization")
+            authenticate(self.resource_protector, self.fetch_scopes, self.fetch_permissions)
         query = self.schema.Meta.model.query.filter_by(is_deleted=False)
         if ordering is not None:
             ordering = ordering.strip()
@@ -172,7 +212,10 @@ class ChassisResource(MethodResource):
     schema = Schema.from_dict(dict())
     response_schema = Schema.from_dict(dict())
 
-    def __init__(self, app, db, schema, record_name=None, logger_service: LoggerService = None):
+    def __init__(self, app, db, schema, record_name=None, logger_service: LoggerService = None,
+                 resource_protector: CustomResourceProtector = None, update_scope: Scope = None,
+                 fetch_scope: Scope = None, delete_scope: Scope = None, update_permissions=None,
+                 fetch_permissions=None, delete_permissions=None):
         self.app = app
         self.service = ChassisService(app, db, schema.Meta.model)
         self.db = db
@@ -192,6 +235,13 @@ class ChassisResource(MethodResource):
         self.response_schema = ResponseSchema()
         self.page_response_schema = RecordPageSchema()
         self.logger_service = logger_service
+        self.resource_protector = resource_protector
+        self.update_scopes = update_scope
+        self.fetch_scopes = fetch_scope
+        self.delete_scopes = delete_scope
+        self.update_permissions = update_permissions
+        self.fetch_permissions = fetch_permissions
+        self.delete_permissions = delete_permissions
 
     @doc(description="View Record")
     @marshal_with(Ref("schema"), code=200)
@@ -199,10 +249,11 @@ class ChassisResource(MethodResource):
     def get(self, **kwargs):
         """
         Fetch record using id
-        :param token: authentication detail
-        :param record_id: record model id
         :return: area details on success or error 404 status if area doesn't exist
         """
+        if self.resource_protector:
+            self.app.logger.debug("Resource protector is present handling authorization")
+            authenticate(self.resource_protector, self.fetch_scopes, self.fetch_permissions)
         record_id = None
         for key, value in kwargs.items():
             record_id = value
@@ -240,6 +291,10 @@ class ChassisResource(MethodResource):
             elif isinstance(arg, TokenMixin):
                 user_id = arg.get_user_id()
         self.app.logger.info(f"Updating {self.record_name}. Payload: %s. User id %s", payload, user_id)
+        token = None
+        if self.resource_protector:
+            self.app.logger.debug("Resource protector is present handling authorization")
+            token = authenticate(self.resource_protector, self.update_scopes, self.update_permissions)
         try:
             validate_foreign_keys(payload, self.db)
             validate_unique_constraints(payload, self.db, True)
@@ -249,17 +304,17 @@ class ChassisResource(MethodResource):
             record = self.service.update(payload, record_id)
             if self.logger_service:
                 self.logger_service.log_success_update(f"Updated {self.record_name} successfully",
-                                                       payload.__class__, payload.id, user_id)
+                                                       payload.__class__, payload.id, user_id, token=token)
             return record
         except ConflictError as ex:
             if self.logger_service:
                 self.logger_service.log_failed_update(f"Failed to update {self.record_name}. {ex.message}",
-                                                      payload.__class__, payload.id, user_id)
+                                                      payload.__class__, payload.id, user_id, token=token)
             return {"status": 400, "errors": [ex.message]}, 400
         except ValidationError as ex:
             if self.logger_service:
                 self.logger_service.log_failed_update(f"Failed to update {self.record_name}. {ex.message}",
-                                                      payload.__class__, payload.id, user_id)
+                                                      payload.__class__, payload.id, user_id, token=token)
             return {"status": 404, "errors": {"detail": ex.message}}, 404
 
     @doc(description="Delete Record")
@@ -283,16 +338,20 @@ class ChassisResource(MethodResource):
             elif isinstance(TokenMixin, arg):
                 user_id = arg.get_user_id()
         self.app.logger.info(f"Deleting {self.record_name} with id %s", record_id)
+        token = None
+        if self.resource_protector:
+            self.app.logger.debug("Resource protector is present handling authorization")
+            token = authenticate(self.resource_protector, self.delete_scopes, self.delete_permissions)
         try:
             self.service.delete(record_id)
             if self.logger_service:
                 self.logger_service.log_success_deletion(f"Deleted {self.record_name} successfully",
-                                                         payload.__class__, record_id, user_id)
+                                                         payload.__class__, record_id, user_id, token=token)
             return {}, 204
         except ValidationError as ex:
             if self.logger_service:
                 self.logger_service.log_failed_deletion(f"Failed to delete {self.record_name}. {ex.message}",
-                                                        payload.__class__, record_id, user_id)
+                                                        payload.__class__, record_id, user_id, token=token)
             return {"errors": [
                 "Record doesn't exist"
             ], "status": 404}, 404
