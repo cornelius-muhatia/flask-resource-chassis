@@ -151,6 +151,9 @@ class ChassisResourceList(MethodResource):
         if self.resource_protector:
             self.app.logger.debug("Resource protector is present handling authorization")
             token = authenticate(self.resource_protector, self.create_scopes, self.create_permissions)
+            if hasattr(payload, "created_by_id"):
+                self.app.logger.debug("Found created by field populating session user id")
+                setattr(payload, "created_by_id", token.get_user_id())
         # Validating foreign keys and unique constraints
         try:
             validate_foreign_keys(payload, self.db)
@@ -276,7 +279,6 @@ class ChassisResource(MethodResource):
         Updates records
         :param args: additional arguments
         """
-        user_id = None
         record_id = None
         # Get record id
         for key, value in kwargs.items():
@@ -288,9 +290,8 @@ class ChassisResource(MethodResource):
             if isinstance(arg, self.schema.Meta.model):
                 payload = arg
                 payload.id = record_id
-            elif isinstance(arg, TokenMixin):
-                user_id = arg.get_user_id()
-        self.app.logger.info(f"Updating {self.record_name}. Payload: %s. User id %s", payload, user_id)
+                break
+        self.app.logger.info(f"Updating {self.record_name}. Payload: %s.", payload)
         token = None
         if self.resource_protector:
             self.app.logger.debug("Resource protector is present handling authorization")
@@ -304,17 +305,17 @@ class ChassisResource(MethodResource):
             record = self.service.update(payload, record_id)
             if self.logger_service:
                 self.logger_service.log_success_update(f"Updated {self.record_name} successfully",
-                                                       payload.__class__, payload.id, user_id, token=token)
+                                                       payload.__class__, payload.id, token=token)
             return record
         except ConflictError as ex:
             if self.logger_service:
                 self.logger_service.log_failed_update(f"Failed to update {self.record_name}. {ex.message}",
-                                                      payload.__class__, payload.id, user_id, token=token)
+                                                      payload.__class__, payload.id, token=token)
             return {"status": 400, "errors": [ex.message]}, 400
         except ValidationError as ex:
             if self.logger_service:
                 self.logger_service.log_failed_update(f"Failed to update {self.record_name}. {ex.message}",
-                                                      payload.__class__, payload.id, user_id, token=token)
+                                                      payload.__class__, payload.id, token=token)
             return {"status": 404, "errors": {"detail": ex.message}}, 404
 
     @doc(description="Delete Record")
@@ -325,7 +326,6 @@ class ChassisResource(MethodResource):
         Delete record
         :return: response with status 204 on success
         """
-        user_id = None
         record_id = None
         for key, value in kwargs.items():
             record_id = value
@@ -335,8 +335,7 @@ class ChassisResource(MethodResource):
             if isinstance(self.schema.Meta.model, arg):
                 payload = arg
                 payload.id = record_id
-            elif isinstance(TokenMixin, arg):
-                user_id = arg.get_user_id()
+                break
         self.app.logger.info(f"Deleting {self.record_name} with id %s", record_id)
         token = None
         if self.resource_protector:
@@ -346,12 +345,12 @@ class ChassisResource(MethodResource):
             self.service.delete(record_id)
             if self.logger_service:
                 self.logger_service.log_success_deletion(f"Deleted {self.record_name} successfully",
-                                                         payload.__class__, record_id, user_id, token=token)
+                                                         payload.__class__, record_id, token=token)
             return {}, 204
         except ValidationError as ex:
             if self.logger_service:
                 self.logger_service.log_failed_deletion(f"Failed to delete {self.record_name}. {ex.message}",
-                                                        payload.__class__, record_id, user_id, token=token)
+                                                        payload.__class__, record_id, token=token)
             return {"errors": [
                 "Record doesn't exist"
             ], "status": 404}, 404

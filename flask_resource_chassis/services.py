@@ -1,7 +1,5 @@
-from sqlalchemy import PrimaryKeyConstraint, Table
 from sqlalchemy.orm.state import InstanceState
 
-from sqlalchemy.inspection import inspect as alchemy_inspect
 from .exceptions import ValidationError
 from .utils import RemoteToken
 
@@ -20,11 +18,10 @@ def get_primary_key(entity):
 
 class LoggerService:
 
-    def log_success_creation(self, description, entity, record_id=None, user_id=None, token: RemoteToken = None):
+    def log_success_creation(self, description, entity, record_id=None, token: RemoteToken = None):
         """
         Logs success creation event
 
-        :param user_id: Session user id
         :param description: audit log description
         :param entity: entity being affected by the action
         :param record_id: record id/database id
@@ -32,22 +29,20 @@ class LoggerService:
         """
         pass
 
-    def log_failed_creation(self, description, entity, user_id=None, token: RemoteToken = None):
+    def log_failed_creation(self, description, entity, token: RemoteToken = None):
         """
         Logs failed creation event
 
-        :param user_id:
         :param description: audit log description
         :param entity: entity being affected by the action
         :param token: RemoteToken object
         """
         pass
 
-    def log_success_update(self, description, entity, record_id, user_id=None, notes="", token: RemoteToken = None):
+    def log_success_update(self, description, entity, record_id, notes="", token: RemoteToken = None):
         """
         Logs success update event
 
-        :param user_id: session user id
         :param description: error description
         :param entity:  entity being affected by the action
         :param record_id: record/row id
@@ -56,11 +51,10 @@ class LoggerService:
         """
         pass
 
-    def log_failed_update(self, description, entity, record_id, user_id=None, notes="", token: RemoteToken = None):
+    def log_failed_update(self, description, entity, record_id,  notes="", token: RemoteToken = None):
         """
         Logs failed update event
 
-        :param user_id: session user id
         :param description: error description
         :param entity: entity being affected by the action
         :param record_id: record/row id
@@ -69,11 +63,10 @@ class LoggerService:
         """
         pass
 
-    def log_failed_deletion(self, description, entity, record_id, user_id=None, notes="", token: RemoteToken = None):
+    def log_failed_deletion(self, description, entity, record_id, notes="", token: RemoteToken = None):
         """
         Logs failed deletion event
 
-        :param user_id: session user id
         :param description: error description
         :param entity: entity being affected by the action
         :param record_id: record/row id
@@ -82,11 +75,10 @@ class LoggerService:
         """
         pass
 
-    def log_success_deletion(self, description, entity, record_id, user_id=None, notes="", token: RemoteToken = None):
+    def log_success_deletion(self, description, entity, record_id, notes="", token: RemoteToken = None):
         """
         Logs success deletion event
 
-        :param user_id: session user id
         :param description: error description
         :param entity: entity being affected by the action
         :param record_id: record/row id
