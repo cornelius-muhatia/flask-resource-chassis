@@ -106,7 +106,7 @@ def validate_unique_constraints(model, db, model_id=None):
 @marshal_with(ResponseWrapper, code=400, description="Validation errors")
 class ChassisResourceList(MethodResource):
     schema = Schema.from_dict(dict())
-    response_schema = Schema.from_dict(dict())
+    # response_schema = Schema.from_dict(dict())
     page_response_schema = Schema.from_dict(dict())
 
     def __init__(self, app, db, schema, record_name=None, logger_service: LoggerService = None,
@@ -128,13 +128,13 @@ class ChassisResourceList(MethodResource):
 
         self.schema = schema
 
-        class ResponseSchema(ResponseWrapper):
-            data = fields.Nested(schema)
+        # class ResponseSchema(ResponseWrapper):
+        #     data = fields.Nested(schema)
 
         class RecordPageSchema(DjangoPageSchema):
             results = fields.List(fields.Nested(schema))
 
-        self.response_schema = ResponseSchema()
+        # self.response_schema = ResponseSchema()
         self.page_response_schema = RecordPageSchema()
         self.logger_service = logger_service
         self.resource_protector = resource_protector
@@ -143,7 +143,7 @@ class ChassisResourceList(MethodResource):
         self.create_permissions = create_permissions
         self.fetch_permissions = fetch_permissions
 
-    @marshal_with(Ref("response_schema"), code=201, description="Request processed successfully")
+    @marshal_with(Ref("schema"), code=201, description="Request processed successfully")
     @use_kwargs(Ref('schema'))
     def post(self, payload=None):
         self.app.logger.info("Creating new %s. Payload: %s", self.record_name, str(payload))
@@ -168,7 +168,7 @@ class ChassisResourceList(MethodResource):
         if self.logger_service:
             self.logger_service.log_success_creation(f"Created {self.record_name} successfully", payload.__class__,
                                                      payload.id, token=token)
-        return {"message": "Request was successful", "data": payload}, 201
+        return payload, 201
 
     # @require_oauth(has_any_authority=["view_area", "add_area", "change_area"])
     @doc(description="View Records. Currently only supports one column sorting:"

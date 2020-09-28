@@ -1,14 +1,23 @@
 import functools
 import time
+import unittest
+import uuid
 
 import requests
 from authlib.integrations.flask_oauth2 import ResourceProtector
 from authlib.oauth2.rfc6749 import MissingAuthorizationError, TokenMixin
 from authlib.oauth2.rfc6750 import BearerTokenValidator, InvalidTokenError
+from flask import json
 from requests.auth import HTTPBasicAuth
 
 from .exceptions import AccessDeniedError
 from .schemas import ResponseWrapper
+
+
+def unauthorized(error):
+    print("Authorization error", error)
+    return {"message": "You are not authorized to perform this request. "
+                       "Ensure you have a valid credentials before trying again"}, 401
 
 
 def validation_error_handler(err):
@@ -92,6 +101,7 @@ class CustomResourceProtector(ResourceProtector):
         :param has_any_authority: User/oauth client permissions
         :return: decorator function
         """
+
         def wrapper(f):
             @functools.wraps(f)
             def decorated(*args, **kwargs):
@@ -106,6 +116,7 @@ class CustomResourceProtector(ResourceProtector):
                                 return True
                             else:
                                 return False
+
                         filters = filter(filter_permission, token.get_authorities())
                         if not any(filters):
                             raise AccessDeniedError()
@@ -120,3 +131,97 @@ class CustomResourceProtector(ResourceProtector):
             return decorated
 
         return wrapper
+
+
+def is_valid_uuid(val):
+    """
+    Check if a string is a valid uuid
+    :param val: uuid String
+    :return: Returns true if is a string is a valid uuid else False
+    """
+    try:
+        uuid.UUID(str(val))
+        return True
+    except ValueError:
+        return False
+
+
+class TestChassis:
+
+    def __init__(self, http_client, endpoint="/v1", resource_name="Record", test_case=None, admin_token=None,
+                 guest_token=None):
+        self.client = http_client
+        self.test_case = test_case if test_case else unittest.TestCase()
+        self.admin_token = admin_token
+        self.guest_token = guest_token
+        self.resource_name = resource_name
+        self.endpoint = endpoint
+
+    def creation_test(self, payload, unique_fields=None, rel_fields=None):
+        """
+        Record creation tests. Unit tests:
+        1. Authorization test if guest or admin token are supplied
+        2. ACL test if guest token is present
+        3. Validation Test (Including unique fields and rel_fields tests if provided)
+        4. Success Tests
+        """
+        if self.admin_token or self.guest_token:
+            response = self.client.post(self.endpoint,
+                                        # headers={"Authorization": f"Bearer {self.admin_token}"},
+                                        content_type='application/json',
+                                        data=json.dumps(payload))
+            self.test_case.assertEqual(response.status_code, 401,
+                                       f"{self.resource_name} creation authorization test.")
+        if self.guest_token:
+            response = self.client.post(self.endpoint,
+                                        headers={"Authorization": f"Bearer {self.guest_token}"},
+                                        content_type='application/json',
+                                        data=json.dumps(payload))
+            self.test_case.assertEqual(response.status_code, 403,
+                                       f"{self.resource_name} creation ACL test.")
+        if self.admin_token:
+            response = self.client.post(self.endpoint,
+                                        headers={"Authorization": f"Bearer {self.admin_token}"},
+                                        content_type='application/json',
+                                        data=json.dumps(payload))
+        else:
+            response = self.client.post(self.endpoint,
+                                        content_type='application/json',
+                                        data=json.dumps(payload))
+        self.test_case.assertEqual(response.status_code, 201,
+                                   f"{self.resource_name} creation success test.")
+        response = self.client.get(f"{self.endpoint}{response.json.get('id')}/",
+                                   headers={"Authorization": f"Bearer {self.admin_token}"},
+                                   content_type='application/json')
+        self.test_case.assertEqual(response.status_code, 200,
+                                   f"{self.resource_name} fetch single record success test.")
+        for key, value in payload.items():
+            self.test_case.assertEqual(value, response.json.get(key), f"{self.resource_name} {key} verification")
+
+        if unique_fields:
+            if self.admin_token:
+                response = self.client.post(self.endpoint,
+                                            headers={"Authorization": f"Bearer {self.admin_token}"},
+                                            content_type='application/json',
+                                            data=json.dumps(payload))
+            else:
+                response = self.client.post(self.endpoint,
+                                            content_type='application/json',
+                                            data=json.dumps(payload))
+            self.test_case.assertEqual(response.status_code, 400, f"{self.resource_name} creation unique test.")
+        if rel_fields:
+            for rel_field in rel_fields:
+                payload2 = payload
+                if is_valid_uuid(rel_field):
+                    payload2[rel_field] = str(uuid.uuid4())
+                else:
+                    payload2[rel_field] = 34111
+                response = self.client.post(self.endpoint,
+                                            headers={"Authorization": f"Bearer {self.admin_token}"},
+                                            content_type='application/json',
+                                            data=json.dumps(payload2))
+                self.test_case.assertEqual(response.status_code, 400,
+                                           f"{self.resource_name} creation {rel_field} validation test.")
+
+    def fetch_test(self, payload):
+        pass
