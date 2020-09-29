@@ -3,7 +3,7 @@ import inspect
 from flask import jsonify
 from flask_apispec import use_kwargs, marshal_with, doc, MethodResource, Ref
 from marshmallow import Schema, fields
-from sqlalchemy import desc, asc, CheckConstraint, not_
+from sqlalchemy import desc, asc, CheckConstraint, not_, or_, and_
 
 from .exceptions import ConflictError, ValidationError
 from .schemas import ResponseWrapper, DjangoPageSchema, error_response, val_error_response
@@ -108,6 +108,7 @@ class ChassisResourceList(MethodResource):
     schema = Schema.from_dict(dict())
     # response_schema = Schema.from_dict(dict())
     page_response_schema = Schema.from_dict(dict())
+    fetch_schema = None
 
     def __init__(self, app, db, schema, record_name=None, logger_service: LoggerService = None,
                  resource_protector: CustomResourceProtector = None, create_scope: Scope = None,
@@ -142,6 +143,17 @@ class ChassisResourceList(MethodResource):
         self.fetch_scopes = fetch_scope
         self.create_permissions = create_permissions
         self.fetch_permissions = fetch_permissions
+        # Fetch schema fields
+        fetch_fields = dict(page_size=fields.Int(required=False), page=fields.Int(required=False),
+                            ordering=fields.Str(required=False), q=fields.Str(required=False),
+                            created_after=fields.Date(required=False), created_before=fields.Date(required=False),
+                            updated_after=fields.Date(required=False), updated_before=fields.Date(required=False))
+        for column in getattr(self.schema.Meta.model, "__table__").c:
+            if column.primary_key == False and column.name != "created_at" and column.name != "updated_at" and \
+                    column.name != "is_deleted" and column.name != "created_by_id":
+                fetch_fields[column.name] = fields.Str(required=False)
+
+        self.fetch_schema = Schema.from_dict(fetch_fields)
 
     @marshal_with(Ref("schema"), code=201, description="Request processed successfully")
     @use_kwargs(Ref('schema'))
@@ -178,14 +190,21 @@ class ChassisResourceList(MethodResource):
                      "<b><i>ordering=-id</i></b></li> "
                      "</ul>")
     @marshal_with(Ref("page_response_schema"), code=200)
-    @use_kwargs({"page_size": fields.Int(required=False), "page": fields.Int(required=False),
-                 "ordering": fields.Str(required=False)}, location="query")
-    def get(self, page_size=None, page=None, ordering=None):
+    # @use_kwargs({"page_size": fields.Int(required=False), "page": fields.Int(required=False),
+    #              "ordering": fields.Str(required=False)}, location="query")
+    @use_kwargs(Ref("fetch_schema"), location="query")
+    def get(self, page_size=None, page=None, ordering=None, q=None, created_after=None, created_before=None,
+            updated_after=None, updated_before=None, **kwargs):
         """
         Fetching records
         :param page_size: Pagination page size
         :param page: pagination page starting with 1
         :param ordering: Column ordering
+        :param q: Search query param
+        :param created_after: From creation date filter
+        :param created_before: To creation date filter
+        :param updated_after: From updated date filter
+        :param updated_before: To updated date filter
         :return: A list of records
         """
         if page_size is None:
@@ -197,6 +216,40 @@ class ChassisResourceList(MethodResource):
             self.app.logger.debug("Resource protector is present handling authorization")
             authenticate(self.resource_protector, self.fetch_scopes, self.fetch_permissions)
         query = self.schema.Meta.model.query.filter_by(is_deleted=False)
+        # If q param exists search columns using q param
+        if q:
+            self.app.logger.debug("Found query param searching columns...")
+            search_query = []
+            for column in getattr(self.schema.Meta.model, "__table__").c:
+                search_query.append(column.like('%' + q + "%"))
+            query = query.filter(or_(*search_query))
+        # Filter using creation date
+        if (created_after or created_before) and hasattr(self.schema.Meta.model, "created_at"):
+            self.app.logger.debug("Found created date filter. Filtering created from %s to %s",
+                                  created_after, created_before)
+            if created_before is None:
+                query = query.filter(self.schema.Meta.model.created_at >= created_after)
+            elif created_after is None:
+                query = query.filter(self.schema.Meta.model.created_at <= created_before)
+            else:
+                query = query.filter(and_(self.schema.Meta.model.created_at >= created_after,
+                                          self.schema.Meta.model.created_at <= created_before))
+        # Filter using update date
+        if (updated_after or updated_before) and hasattr(self.schema.Meta.model, "updated_at"):
+            self.app.logger.debug("Found updated date filter. Filtering updated from %s to %s",
+                                  updated_after, updated_before)
+            if updated_before is None:
+                query = query.filter(self.schema.Meta.model.updated_at >= updated_after)
+            elif updated_after is None:
+                query = query.filter(self.schema.Meta.model.updated_at <= updated_before)
+            else:
+                query = query.filter(and_(self.schema.Meta.model.updated_at >= created_after,
+                                          self.schema.Meta.model.updated_at <= created_before))
+        # Filtering using other columns
+        if kwargs:
+            query = query.filter_by(**kwargs)
+
+        # Ordering query
         if ordering is not None:
             ordering = ordering.strip()
             if ordering[0] == "-":
@@ -205,6 +258,7 @@ class ChassisResourceList(MethodResource):
                 query = query.order_by(asc(ordering))
         else:
             self.app.logger.debug("Ordering(%s) not specified skipping ordering", ordering)
+
         response = query.paginate(page=page, per_page=page_size)
         return {"count": response.total, "current_page": response.page, "page_size": response.per_page,
                 "total_pages": response.pages, "results": response.items}
