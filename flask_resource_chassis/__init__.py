@@ -1,16 +1,10 @@
-import inspect
-
-from flask import jsonify
 from flask_apispec import use_kwargs, marshal_with, doc, MethodResource, Ref
 from marshmallow import Schema, fields
-from sqlalchemy import desc, asc, CheckConstraint, not_, or_, and_
+from sqlalchemy import desc, asc, not_, or_, and_
 
 from .exceptions import ConflictError, ValidationError
 from .schemas import ResponseWrapper, DjangoPageSchema, error_response, val_error_response
 from .services import ChassisService, LoggerService, get_primary_key
-from authlib.oauth2.rfc6749 import TokenMixin
-from authlib.oauth2.rfc6750 import InsufficientScopeError, InvalidTokenError
-
 from .utils import CustomResourceProtector
 
 
