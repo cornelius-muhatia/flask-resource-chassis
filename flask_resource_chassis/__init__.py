@@ -145,9 +145,13 @@ class ChassisResourceList(MethodResource):
         self.fetch_permissions = fetch_permissions
         # Fetch schema fields
         fetch_fields = dict(page_size=fields.Int(required=False), page=fields.Int(required=False),
-                            ordering=fields.Str(required=False), q=fields.Str(required=False),
-                            created_after=fields.Date(required=False), created_before=fields.Date(required=False),
-                            updated_after=fields.Date(required=False), updated_before=fields.Date(required=False))
+                            ordering=fields.Str(required=False), q=fields.Str(required=False))
+        if hasattr(self.schema.Meta.model, "created_at"):
+            fetch_fields["created_after"] = fields.Date(required=False)
+            fetch_fields["created_before"] = fields.Date(required=False)
+        if hasattr(self.schema.Meta.model, "updated_at"):
+            fetch_fields["updated_after"] = fields.Date(required=False)
+            fetch_fields["updated_before"] = fields.Date(required=False)
         for column in getattr(self.schema.Meta.model, "__table__").c:
             if column.primary_key == False and column.name != "created_at" and column.name != "updated_at" and \
                     column.name != "is_deleted" and column.name != "created_by_id":
@@ -182,7 +186,6 @@ class ChassisResourceList(MethodResource):
                                                      payload.id, token=token)
         return payload, 201
 
-    # @require_oauth(has_any_authority=["view_area", "add_area", "change_area"])
     @doc(description="View Records. Currently only supports one column sorting:"
                      "<ul>"
                      "<li>For ascending specify ordering parameter with column name</li>"
@@ -190,8 +193,6 @@ class ChassisResourceList(MethodResource):
                      "<b><i>ordering=-id</i></b></li> "
                      "</ul>")
     @marshal_with(Ref("page_response_schema"), code=200)
-    # @use_kwargs({"page_size": fields.Int(required=False), "page": fields.Int(required=False),
-    #              "ordering": fields.Str(required=False)}, location="query")
     @use_kwargs(Ref("fetch_schema"), location="query")
     def get(self, page_size=None, page=None, ordering=None, q=None, created_after=None, created_before=None,
             updated_after=None, updated_before=None, **kwargs):
@@ -343,7 +344,6 @@ class ChassisResource(MethodResource):
         for arg in args:
             if isinstance(arg, self.schema.Meta.model):
                 payload = arg
-                payload.id = record_id
                 break
         self.app.logger.info(f"Updating {self.record_name}. Payload: %s.", payload)
         token = None
@@ -359,17 +359,17 @@ class ChassisResource(MethodResource):
             record = self.service.update(payload, record_id)
             if self.logger_service:
                 self.logger_service.log_success_update(f"Updated {self.record_name} successfully",
-                                                       payload.__class__, payload.id, token=token)
+                                                       payload.__class__, record_id, token=token)
             return record
         except ConflictError as ex:
             if self.logger_service:
                 self.logger_service.log_failed_update(f"Failed to update {self.record_name}. {ex.message}",
-                                                      payload.__class__, payload.id, token=token)
+                                                      payload.__class__, record_id, token=token)
             return {"status": 400, "errors": [ex.message]}, 400
         except ValidationError as ex:
             if self.logger_service:
                 self.logger_service.log_failed_update(f"Failed to update {self.record_name}. {ex.message}",
-                                                      payload.__class__, payload.id, token=token)
+                                                      payload.__class__, record_id, token=token)
             return {"status": 404, "errors": {"detail": ex.message}}, 404
 
     @doc(description="Delete Record")

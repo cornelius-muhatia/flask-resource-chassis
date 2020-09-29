@@ -1,3 +1,18 @@
+# -*- coding: utf-8 -*-
+# Copyright 2020 authors and contributors All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
 from sqlalchemy.orm.state import InstanceState
 
 from .exceptions import ValidationError
@@ -89,13 +104,27 @@ class LoggerService:
 
 
 class ChassisService:
+    """Supports chassis resource database actions like entity creation update and deletions"""
 
     def __init__(self, app, db, entity):
+        """
+        Instantiates ChassisService object
+
+        :param app: Flask application object
+        :param db: SQLAlchemy database object
+        :param entity: SQLAlchemy model/entity
+        """
         self.app = app
         self.db = db
         self.entity = entity
 
     def create(self, entity):
+        """
+        Creates new entity
+
+        :param entity: SQLAlchemy model
+        :return: Newly created SQLAlchemy model with default fields populated
+        """
         self.app.logger.debug("Inserting new record: Payload: %s", str(entity))
         self.db.session.add(entity)
         self.db.session.commit()
@@ -107,6 +136,7 @@ class ChassisService:
         :param entity: Entity
         :param model_id: Entity primary id value
         :return: Updated entity
+        :throws: ValidationError if entity with model_id doesn't exist
         """
         self.app.logger.debug("Updating record: Payload: %s", str(entity))
         primary_key = get_primary_key(entity)
@@ -126,7 +156,7 @@ class ChassisService:
             primary_key == model_id)
         self.db.session.execute(stm)
         self.db.session.commit()
-        return entity
+        return db_entity
 
     def delete(self, record_id):
         """
