@@ -346,7 +346,7 @@ class ChassisResource(MethodResource):
             token = authenticate(self.resource_protector, self.update_scopes, self.update_permissions)
         try:
             validate_foreign_keys(payload, self.db)
-            validate_unique_constraints(payload, self.db, True)
+            validate_unique_constraints(payload, self.db, record_id)
             # attrs = inspect.getmembers(payload, lambda a: not (inspect.isroutine(a)))
             # for attr in attrs:
             #     print(attr)
@@ -355,16 +355,16 @@ class ChassisResource(MethodResource):
                 self.logger_service.log_success_update(f"Updated {self.record_name} successfully",
                                                        payload.__class__, record_id, token=token)
             return record
-        except ConflictError as ex:
+        except (ConflictError, ValidationError) as ex:
             if self.logger_service:
                 self.logger_service.log_failed_update(f"Failed to update {self.record_name}. {ex.message}",
                                                       payload.__class__, record_id, token=token)
             return {"status": 400, "errors": [ex.message]}, 400
-        except ValidationError as ex:
-            if self.logger_service:
-                self.logger_service.log_failed_update(f"Failed to update {self.record_name}. {ex.message}",
-                                                      payload.__class__, record_id, token=token)
-            return {"status": 404, "errors": {"detail": ex.message}}, 404
+        # except ValidationError as ex:
+        #     if self.logger_service:
+        #         self.logger_service.log_failed_update(f"Failed to update {self.record_name}. {ex.message}",
+        #                                               payload.__class__, record_id, token=token)
+        #     return {"status": 400, "errors": {"detail": ex.message}}, 400
 
     @doc(description="Delete Record")
     @marshal_with(Schema(), code=204)
