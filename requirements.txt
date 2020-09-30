@@ -4,3 +4,6 @@ Flask-SQLAlchemy
 flask-marshmallow
 pytest
 Authlib
+flask-restful
+requests
+requests
