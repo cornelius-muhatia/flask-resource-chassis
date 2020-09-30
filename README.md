@@ -4,7 +4,17 @@ Extends flask restful api. Actions supported include:
 1. Resource Update
 1. Listing resource supporting:
     1. Ordering by field
+    1. Filtering by field, created_at  and updated_at
+    1. Search
 1. Delete resource
+
+## Table of Content
+- [Installation](#installation)
+- [Minimal setup](#minimal-setup)
+- [Swagger Documentation](#swagger-documentation)
+- [Authorization and Authentication](#authorization-and-authentication)
+    - [Scope and Permission Definition](#scopes-and-permission-definition)
+- [Audit Logs](#audit-logs)
 
 ## Installation
 Installation with pip
@@ -120,3 +130,104 @@ You can test the application using curl or Postman. Examples:
     ```shell script
     curl --location --request DELETE 'localhost:5000/v1/person/1/'
     ```
+> **A full implementation can be found in [demo folder](demo)**
+ 
+ ## Swagger Documentation
+ You can enable swagger documentation by adding the api spec configuration and swagger doc resources. For example from 
+ the minimal setup above add the following script after Restful api configuration 
+```python 
+# Swagger documentation configuration
+from apispec import APISpec
+from apispec.ext.marshmallow import MarshmallowPlugin
+from flask_apispec import FlaskApiSpec
+app.config.update({
+    'APISPEC_SPEC': APISpec(
+        title='Test Chassis Service',
+        version='1.0.0-b1',
+        openapi_version="2.0",
+        plugins=[MarshmallowPlugin()],
+        info=dict(
+            description="Flask resource chassis swagger documentation demo",
+            license={
+                "name": "Apache 2.0",
+                "url": "https://www.apache.org/licenses/LICENSE-2.0.html"
+            }
+        )
+    ),
+    'APISPEC_SWAGGER_URL': '/swagger/',
+})
+
+docs = FlaskApiSpec(app)
+docs.register(PersonApiList)
+docs.register(PersonApi)
+```
+You should be able  to access swagger-ui from [localhost:5000/swagger-ui](http://localhost:5000/swagger-ui)
+
+## Authorization and Authentication
+Authentication is supported using AuthLib ResourceProtector. To enable authentication pass resource protector instance 
+on Resource Initialization:
+```python
+from authlib.oauth2.rfc6750 import BearerTokenValidator
+from flask_resource_chassis.utils import RemoteToken, CustomResourceProtector
+from flask_resource_chassis import Scope
+
+
+class DefaultRemoteTokenValidator(BearerTokenValidator):
+    """
+    Mock token validator for testing
+    """
+
+    def __init__(self, realm=None):
+        super().__init__(realm)
+        self.token_cls = RemoteToken
+
+    def authenticate_token(self, token_string):
+        if token_string == "admin_token":
+            return self.token_cls(dict(active="true", scope="create update delete",
+                                       authorities=["can_create", "can_update", "can_delete"],
+                                       user_id="26957b74-47d0-40df-96a1-f104f3828552"))
+        elif token_string == "guest_token":
+            return self.token_cls(dict(active="true", scope="", authorities=[],
+                                       user_id="26957b74-47d0-40df-96a1-f104f3828552"))
+        else:
+            return None
+
+    def request_invalid(self, request):
+        return False
+
+    def token_revoked(self, token):
+        return token.is_revoked()
+
+
+resource_protector = CustomResourceProtector()
+resource_protector.register_token_validator(DefaultRemoteTokenValidator())
+
+
+class PersonApiList(ChassisResourceList):
+    """
+    Responsible for handling post and listing persons records
+    """
+
+    def __init__(self):
+        super().__init__(app, db, PersonSchema, "Person Resource", resource_protector=resource_protector,
+                         create_scope=Scope(scopes="create"), create_permissions=["can_create"],
+                         fetch_scope=Scope(scopes="read create", operator="OR"))
+```
+ ### Scopes and Permission Definition
+ 1. ChassisResourceList scopes and permissions
+     - Define resource creation scopes using `create_scope=Scope(scopes="{scope_name}")` parameter. You can provide multiple
+     scopes separating them by space. An operator(OR/AND) is expected for scope comparison i.e. 
+     `create_scope=Scope(scopes="scope1 scope2", operator="AND")`
+     - For GET(Listing resource) request provide the following scope parameter`fetch_scope=Scope(scopes="{scope_name}")`
+     - POST(resource creation) define the following permission parameter `create_permissions=["permission_one", "permission_two"]`
+     - GET(Listing resource) define the following permission parameter `fetch_permissions=["permission_one"]`
+1. ChassisResource scopes and permissions
+    - Scopes for GET(Listing resources) request define using parameter `fetch_scope=Scope(scopes="scope1 scope2 scope3", operator="OR"`)
+    - Scopes for PATCH(Update resource) request use parameter `update_scope=Scope(scopes="scope1 scope2", operator="OR")`
+    - Scopes for DELETE(Delete resource) request use parameter `delete_scope=Scope(scopes="scope1 scope2", operator="AND")`
+    - For GET, PATCH, DELETE permissions use parameters `fetch_permissions=["scope1", "scope2"]`, 
+    `update_permissions=["scope1", "scope2"]`, `delete_permissions=["scope1", "scope2"]` respectively.
+> Note: All permissions are compared using AND operator
+
+## Audit Logs
+For audit logs implement `LoggerService`  class. An example can be found in the [demo](demo)
