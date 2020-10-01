@@ -227,7 +227,7 @@ class PersonApiList(ChassisResourceList):
     - Scopes for DELETE(Delete resource) request use parameter `delete_scope=Scope(scopes="scope1 scope2", operator="AND")`
     - For GET, PATCH, DELETE permissions use parameters `fetch_permissions=["scope1", "scope2"]`, 
     `update_permissions=["scope1", "scope2"]`, `delete_permissions=["scope1", "scope2"]` respectively.
-> Note: All permissions are compared using AND operator
+> Note: All permissions are compared using OR operator
 
 ## Audit Logs
 For audit logs implement `LoggerService`  class. An example can be found in the [demo](demo)

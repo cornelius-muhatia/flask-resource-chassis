@@ -52,6 +52,10 @@ class TestResourceChassis(TestCase):
             # self.fail("Authorization fail test. " + str(response.json) + " status " + str(response.status_code))
         except InvalidTokenError:
             pass
+        # Test ACL Validation
+        # response = self.client.post("/v1/person", headers={"Authorization": f"Bearer guest_token"},
+        #                             data=json.dumps(payload), content_type='application/json')
+        self.assertEqual(response.status_code, 403)
         # Successfully tests
         response = self.client.post("/v1/person", headers={"Authorization": f"Bearer admin_token"},
                                     data=json.dumps(payload), content_type='application/json')
