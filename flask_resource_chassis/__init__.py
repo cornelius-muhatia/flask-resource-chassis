@@ -50,21 +50,23 @@ def validate_foreign_keys(model, db):
         if column.foreign_keys:
             for key in column.foreign_keys:
                 # print(f"Details", key, key.column.name, key.constraint)
-                filters = {
-                    "is_deleted": False,
-                    key.column.name: getattr(model, "__dict__").get(column.name)
-                }
-                fk_model = db.session.query(key.constraint.referred_table).filter_by(**filters).first()
-                if fk_model is None:
-                    if column.doc:
-                        raise ValidationError(f"Sorry {column.doc} doesn't exist")
-                    else:
-                        raise ValidationError(f"Associated entity({key.constraint.referred_table}) doesn't exist")
-                elif hasattr(fk_model, "is_active") and not getattr(fk_model, "is_active"):
-                    if column.doc:
-                        raise ValidationError(f"Sorry {column.doc} is not active")
-                    else:
-                        raise ValidationError(f"Associated entity({key.constraint.referred_table}) is not active")
+                payload = getattr(model, "__dict__")
+                if column.name in payload:
+                    filters = {
+                        "is_deleted": False,
+                        key.column.name: payload.get(column.name)
+                    }
+                    fk_model = db.session.query(key.constraint.referred_table).filter_by(**filters).first()
+                    if fk_model is None:
+                        if column.doc:
+                            raise ValidationError(f"Sorry {column.doc} doesn't exist")
+                        else:
+                            raise ValidationError(f"Associated entity({key.constraint.referred_table}) doesn't exist")
+                    elif hasattr(fk_model, "is_active") and not getattr(fk_model, "is_active"):
+                        if column.doc:
+                            raise ValidationError(f"Sorry {column.doc} is not active")
+                        else:
+                            raise ValidationError(f"Associated entity({key.constraint.referred_table}) is not active")
 
 
 def validate_unique_constraints(model, db, model_id=None):
@@ -84,8 +86,10 @@ def validate_unique_constraints(model, db, model_id=None):
                 "is_deleted": False
             }
             for column in index.columns:
-                filters[column.name] = model.__dict__[column.name]
-
+                if column.name in model.__dict__:
+                    filters[column.name] = model.__dict__[column.name]
+            if len(filters) == 1:
+                continue
             if model_id:
                 pk_col = get_primary_key(model)
                 query = db.session.query(entity_table).filter_by(**filters)

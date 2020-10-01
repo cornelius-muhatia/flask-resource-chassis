@@ -24,6 +24,12 @@ db = SQLAlchemy(test_app)
 marshmallow = Marshmallow(test_app)
 
 
+class Location(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(254), nullable=False)
+    is_deleted = db.Column(db.Boolean, nullable=False, default=False)
+
+
 class Gender(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     gender = db.Column(db.String(254), nullable=False)
@@ -42,7 +48,8 @@ class Person(db.Model):
     is_deleted = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.now(), default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.now(), default=datetime.utcnow)
-    national_id = db.Column(db.String, nullable=False)
+    national_id = db.Column(db.String)
+    location_id = db.Column(db.Integer, db.ForeignKey(Location.id, ondelete='RESTRICT'), doc="Location")
 
     gender = db.relationship('Gender')
 
@@ -51,6 +58,13 @@ class Person(db.Model):
 def insert_default_grant(target, connection, **kw):
     db.session.add(Gender(gender="Male", is_active=False))
     db.session.add(Gender(gender="Female"))
+    db.session.commit()
+
+
+@event.listens_for(Location.__table__, 'after_create')
+def insert_default_grant(target, connection, **kw):
+    db.session.add(Location(name="Mars"))
+    db.session.add(Location(name="Earth"))
     db.session.commit()
 
 

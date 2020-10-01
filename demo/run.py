@@ -53,7 +53,7 @@ class Person(db.Model):
     full_name = db.Column(db.String(254), nullable=False)
     age = db.Column(db.Integer)
     gender_id = db.Column(db.Integer, db.ForeignKey(Gender.id, ondelete='RESTRICT'), nullable=False, doc="Gender Doc")
-    national_id = db.Column(db.String, nullable=False)
+    national_id = db.Column(db.String)
     is_deleted = db.Column(db.Boolean, nullable=False, default=False)
     created_by_id = db.Column(db.Text())
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.now(), default=datetime.utcnow)
