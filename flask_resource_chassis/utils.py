@@ -9,9 +9,11 @@ from authlib.oauth2.rfc6749 import MissingAuthorizationError, TokenMixin
 from authlib.oauth2.rfc6750 import BearerTokenValidator, InvalidTokenError
 from flask import json
 from requests.auth import HTTPBasicAuth
+from sqlalchemy import TypeDecorator, CHAR
 
 from .exceptions import AccessDeniedError
 from .schemas import ResponseWrapper
+from sqlalchemy.dialects.postgresql import UUID
 
 
 def unauthorized(error):
@@ -225,3 +227,37 @@ class TestChassis:
 
     def fetch_test(self, payload):
         pass
+
+
+class GUID(TypeDecorator):
+    """Platform-independent GUID type.
+    Uses PostgreSQL's UUID type, otherwise uses
+    CHAR(32), storing as stringified hex values.
+    """
+    impl = CHAR
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            return dialect.type_descriptor(UUID())
+        else:
+            return dialect.type_descriptor(CHAR(32))
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return value
+        elif dialect.name == 'postgresql':
+            return str(value)
+        else:
+            if not isinstance(value, uuid.UUID):
+                return "%.32x" % uuid.UUID(value).int
+            else:
+                # hexstring
+                return "%.32x" % value.int
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return value
+        else:
+            if not isinstance(value, uuid.UUID):
+                value = uuid.UUID(value)
+            return value
