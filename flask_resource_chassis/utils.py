@@ -2,6 +2,7 @@ import functools
 import time
 import unittest
 import uuid
+from abc import ABC
 
 import requests
 from authlib.integrations.flask_oauth2 import ResourceProtector
