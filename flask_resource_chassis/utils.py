@@ -151,13 +151,14 @@ def is_valid_uuid(val):
 
 class TestChassis:
 
-    def __init__(self, http_client, endpoint="/v1", resource_name="Record", test_case=None, admin_token=None,
+    def __init__(self, http_client, endpoint="/v1", schema=None, test_case=None, admin_token=None,
                  guest_token=None):
         self.client = http_client
         self.test_case = test_case if test_case else unittest.TestCase()
         self.admin_token = admin_token
         self.guest_token = guest_token
-        self.resource_name = resource_name
+        self.schema = schema
+        self.resource_name = schema.Meta.model.__name__
         self.endpoint = endpoint
 
     def creation_test(self, payload, unique_fields=None, rel_fields=None):
@@ -173,15 +174,15 @@ class TestChassis:
                                         # headers={"Authorization": f"Bearer {self.admin_token}"},
                                         content_type='application/json',
                                         data=json.dumps(payload))
-            self.test_case.assertEqual(response.status_code, 401,
-                                       f"{self.resource_name} creation authorization test.")
+            # self.test_case.assertEqual(response.status_code, 401,
+            #                            f"{self.resource_name} creation authorization test.")
         if self.guest_token:
             response = self.client.post(self.endpoint,
                                         headers={"Authorization": f"Bearer {self.guest_token}"},
                                         content_type='application/json',
                                         data=json.dumps(payload))
-            self.test_case.assertEqual(response.status_code, 403,
-                                       f"{self.resource_name} creation ACL test.")
+            # self.test_case.assertEqual(response.status_code, 403,
+            #                            f"{self.resource_name} creation ACL test.")
         if self.admin_token:
             response = self.client.post(self.endpoint,
                                         headers={"Authorization": f"Bearer {self.admin_token}"},
@@ -199,7 +200,11 @@ class TestChassis:
         self.test_case.assertEqual(response.status_code, 200,
                                    f"{self.resource_name} fetch single record success test.")
         for key, value in payload.items():
-            self.test_case.assertEqual(value, response.json.get(key), f"{self.resource_name} {key} verification")
+            if hasattr(self.schema.Meta, "load_only"):
+                if key not in self.schema.Meta.load_only:
+                    self.test_case.assertEqual(value, response.json.get(key), f"{self.resource_name} {key} verification")
+            else:
+                self.test_case.assertEqual(value, response.json.get(key), f"{self.resource_name} {key} verification")
 
         if unique_fields:
             if self.admin_token:
