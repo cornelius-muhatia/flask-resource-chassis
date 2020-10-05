@@ -3,6 +3,7 @@ import time
 import unittest
 import uuid
 from abc import ABC
+from datetime import datetime, timedelta
 
 import requests
 from authlib.integrations.flask_oauth2 import ResourceProtector
@@ -174,15 +175,15 @@ class TestChassis:
                                         # headers={"Authorization": f"Bearer {self.admin_token}"},
                                         content_type='application/json',
                                         data=json.dumps(payload))
-            # self.test_case.assertEqual(response.status_code, 401,
-            #                            f"{self.resource_name} creation authorization test.")
+            self.test_case.assertEqual(response.status_code, 401,
+                                       f"{self.resource_name} creation authorization test.")
         if self.guest_token:
             response = self.client.post(self.endpoint,
                                         headers={"Authorization": f"Bearer {self.guest_token}"},
                                         content_type='application/json',
                                         data=json.dumps(payload))
-            # self.test_case.assertEqual(response.status_code, 403,
-            #                            f"{self.resource_name} creation ACL test.")
+            self.test_case.assertEqual(response.status_code, 403,
+                                       f"{self.resource_name} creation ACL test.")
         if self.admin_token:
             response = self.client.post(self.endpoint,
                                         headers={"Authorization": f"Bearer {self.admin_token}"},
@@ -194,15 +195,20 @@ class TestChassis:
                                         data=json.dumps(payload))
         self.test_case.assertEqual(response.status_code, 201,
                                    f"{self.resource_name} creation success test.")
-        response = self.client.get(f"{self.endpoint}{response.json.get('id')}/",
-                                   headers={"Authorization": f"Bearer {self.admin_token}"},
-                                   content_type='application/json')
+        if self.admin_token:
+            response = self.client.get(f"{self.endpoint}{response.json.get('id')}/",
+                                       headers={"Authorization": f"Bearer {self.admin_token}"},
+                                       content_type='application/json')
+        else:
+            response = self.client.get(f"{self.endpoint}{response.json.get('id')}/",
+                                       content_type='application/json')
         self.test_case.assertEqual(response.status_code, 200,
                                    f"{self.resource_name} fetch single record success test.")
         for key, value in payload.items():
             if hasattr(self.schema.Meta, "load_only"):
                 if key not in self.schema.Meta.load_only:
-                    self.test_case.assertEqual(value, response.json.get(key), f"{self.resource_name} {key} verification")
+                    self.test_case.assertEqual(value, response.json.get(key),
+                                               f"{self.resource_name} {key} verification")
             else:
                 self.test_case.assertEqual(value, response.json.get(key), f"{self.resource_name} {key} verification")
 
@@ -231,8 +237,154 @@ class TestChassis:
                 self.test_case.assertEqual(response.status_code, 400,
                                            f"{self.resource_name} creation {rel_field} validation test.")
 
-    def fetch_test(self, payload):
-        pass
+    def fetch_test(self, *args):
+        """
+
+        """
+        id__ = args[0].id
+        payload = getattr(args[0], "_sa_instance_state").object.__dict__
+        if self.admin_token or self.guest_token:
+            response = self.client.get(self.endpoint)
+            # self.test_case.assertEqual(response.status_code, 401,
+            #                            f"{self.resource_name} fetch authorization test.")
+        if self.guest_token:
+            response = self.client.get(self.endpoint, headers={"Authorization": f"Bearer {self.guest_token}"})
+            # self.test_case.assertEqual(response.status_code, 403,
+            #                            f"{self.resource_name} fetch ACL test.")
+
+        if self.admin_token:
+            response = self.client.get(f"{self.endpoint}",
+                                       headers={"Authorization": f"Bearer {self.admin_token}"})
+        else:
+            response = self.client.get(f"{self.endpoint}",
+                                       content_type='application/json')
+        self.test_case.assertEqual(response.status_code, 200,
+                                   f"{self.resource_name} fetch record success test.")
+        self.test_case.assertTrue((response.json.get("count") >= len(args)),
+                                  f"Fetch {self.resource_name} test verify count")
+        self.test_case.assertTrue((response.json.get("current_page") == 1),
+                                  f"Fetch {self.resource_name} test verify page")
+
+        # Test filters
+        primary_column = None
+        from sqlalchemy.sql.sqltypes import Integer, String
+        for column in getattr(args[0], "__table__").c:
+            if column.primary_key:
+                primary_column = column
+            elif column.name == "created_at":  # Found date time column applying date filter
+                self.handle_creation_test(len(args))
+            elif column.name == "updated_at":
+                self.handle_update_at_test(len(args))
+            elif isinstance(column.type, Integer) and payload.get(column.name):
+                if self.admin_token:
+                    response = self.client.get(f"{self.endpoint}?{column.name}={payload.get(column.name)}",
+                                               headers={"Authorization": f"Bearer {self.admin_token}"})
+                    response2 = self.client.get(f"{self.endpoint}?{column.name}=-999999999",
+                                                headers={"Authorization": f"Bearer {self.admin_token}"})
+                else:
+                    response = self.client.get(f"{self.endpoint}?{column.name}={payload.get(column.name)}")
+                    response2 = self.client.get(f"{self.endpoint}?{column.name}=-999999999")
+                self.test_case.assertTrue((response.json.get("count") >= 1),
+                                          f"Fetch {self.resource_name} test verify {column.name} count")
+                self.test_case.assertEqual(response2.json.get("count"), 0,
+                                           f"Fetch {self.resource_name} test verify {column.name} count")
+            elif isinstance(column.type, String) and payload.get(column.name) is not None:
+                if self.admin_token:
+                    response = self.client.get(f"{self.endpoint}?{column.name}={payload.get(column.name)}",
+                                               headers={"Authorization": f"Bearer {self.admin_token}"})
+                    response2 = self.client.get(f"{self.endpoint}?{column.name}={str(uuid.uuid4())}",
+                                                headers={"Authorization": f"Bearer {self.admin_token}"})
+                else:
+                    response = self.client.get(f"{self.endpoint}?{column.name}={payload.get(column.name)}")
+                    response2 = self.client.get(f"{self.endpoint}?{column.name}={str(uuid.uuid4())}",
+                                                headers={"Authorization": f"Bearer {self.admin_token}"})
+                self.test_case.assertTrue((response.json.get("count") >= 1),
+                                          f"Fetch {self.resource_name} test verify {column.name} count")
+                self.test_case.assertEqual(response2.json.get("count"), 0,
+                                           f"Fetch {self.resource_name} test verify {column.name} count")
+        # Test search
+        if self.admin_token:
+            response = self.client.get(f"{self.endpoint}?q={str(uuid.uuid4())}",
+                                       headers={"Authorization": f"Bearer {self.admin_token}"})
+        else:
+            response = self.client.get(f"{self.endpoint}?q={str(uuid.uuid4())}")
+        self.test_case.assertEqual(response.json.get("count"), 0,
+                                   f"Search {self.resource_name} test verify result count")
+        # Test ordering
+        if len(args) > 1 and payload.get("created_at"):
+            if self.admin_token:
+                response = self.client.get(f"{self.endpoint}?ordering=created_at",
+                                           headers={"Authorization": f"Bearer {self.admin_token}"})
+                response2 = self.client.get(f"{self.endpoint}?ordering=-created_at",
+                                            headers={"Authorization": f"Bearer {self.admin_token}"})
+            else:
+                response = self.client.get(f"{self.endpoint}?ordering=created_at")
+                response2 = self.client.get(f"{self.endpoint}?ordering=-created_at")
+            self.test_case.assertLess(response.json.get('results')[0].get('created_at'),
+                                      response.json.get('results')[1].get('created_at'),
+                                      f"Ordering {self.resource_name} by ascending")
+            self.test_case.assertGreater(response2.json.get('results')[0].get('created_at'),
+                                         response2.json.get('results')[1].get('created_at'),
+                                         f"Ordering {self.resource_name} by descending")
+
+    def handle_creation_test(self, entities_count):
+        """
+        Handle created_at date filter
+        :param entities_count: Available saved records in the database
+        """
+        if self.admin_token:
+            response = self.client.get(f"{self.endpoint}?created_before=1997-01-01",
+                                       headers={"Authorization": f"Bearer {self.admin_token}"})
+        else:
+            response = self.client.get(f"{self.endpoint}?created_before=1997-01-01")
+        self.test_case.assertEqual(response.status_code, 200, f"{self.resource_name} creation date before filter test")
+        self.test_case.assertEqual(response.json.get("count"), 0,
+                                   f"{self.resource_name} creation date before filter count test")
+
+        before_date = datetime.now() + timedelta(days=1)
+        before_date = before_date.strftime('%Y-%m-%d')
+        if self.admin_token:
+            response = self.client.get(f"{self.endpoint}?created_before=" + before_date,
+                                       headers={"Authorization": f"Bearer {self.admin_token}"})
+        else:
+            response = self.client.get(f"{self.endpoint}?created_before=" + before_date)
+        self.test_case.assertEqual(response.status_code, 200, f"{self.resource_name} creation date before filter test")
+        self.test_case.assertTrue(response.json.get("count") >= entities_count,
+                                  f"{self.resource_name} creation date before filter count {entities_count} test")
+        if self.admin_token:
+            response = self.client.get(f"{self.endpoint}?created_after=" + before_date,
+                                       headers={"Authorization": f"Bearer {self.admin_token}"})
+        else:
+            response = self.client.get(f"{self.endpoint}?created_after=" + before_date)
+        self.test_case.assertEqual(response.status_code, 200, f"{self.resource_name} creation date before filter test")
+        self.test_case.assertEqual(response.json.get("count"), 0,
+                                   f"{self.resource_name} creation date before filter count test")
+
+    def handle_update_at_test(self, entities_count):
+        """
+        Handle update_at date filter unit tests
+        :param entities_count: Available saved records in the database
+        """
+        before_date = datetime.now() + timedelta(days=1)
+        before_date = before_date.strftime('%Y-%m-%d')
+        if self.admin_token:
+            response = self.client.get(f"{self.endpoint}?updated_before=" + before_date,
+                                       headers={"Authorization": f"Bearer {self.admin_token}"})
+        else:
+            response = self.client.get(f"{self.endpoint}?updated_before=" + before_date)
+        self.test_case.assertEqual(response.status_code, 200,
+                                   f"{self.resource_name} Updated before " + str(response.json))
+        self.test_case.assertTrue(response.json.get("count") >= entities_count)
+        self.test_case.assertEqual(response.json.get("current_page"), 1)
+        if self.admin_token:
+            response = self.client.get(f"{self.endpoint}?updated_after=" + before_date,
+                                       headers={"Authorization": f"Bearer {self.admin_token}"})
+        else:
+            response = self.client.get(f"{self.endpoint}?updated_after=" + before_date)
+        self.test_case.assertEqual(response.status_code, 200,
+                                   f"{self.resource_name} Updated before " + str(response.json))
+        self.test_case.assertEqual(response.json.get("count"), 0)
+        self.test_case.assertEqual(response.json.get("current_page"), 1)
 
 
 class GUID(TypeDecorator):
