@@ -1,6 +1,7 @@
 import functools
 import time
 import unittest
+import urllib.parse
 import uuid
 from abc import ABC
 from datetime import datetime, timedelta
@@ -162,6 +163,18 @@ class TestChassis:
         self.resource_name = schema.Meta.model.__name__
         self.endpoint = endpoint
 
+    @staticmethod
+    def get_primary_key(entity):
+        """
+        Gets primary key column from entity
+        :param entity: SqlAlchemy model
+        :return: SqlAlchemy Column
+        """
+        for column in getattr(entity, "__table__").c:
+            if column.primary_key:
+                return column
+        return None
+
     def creation_test(self, payload, unique_fields=None, rel_fields=None):
         """
         Record creation tests. Unit tests:
@@ -172,11 +185,10 @@ class TestChassis:
         """
         if self.admin_token or self.guest_token:
             response = self.client.post(self.endpoint,
-                                        # headers={"Authorization": f"Bearer {self.admin_token}"},
                                         content_type='application/json',
                                         data=json.dumps(payload))
             self.test_case.assertEqual(response.status_code, 401,
-                                       f"{self.resource_name} creation authorization test.")
+                                       f"{self.resource_name} creation authorization test. {str(response.json)}")
         if self.guest_token:
             response = self.client.post(self.endpoint,
                                         headers={"Authorization": f"Bearer {self.guest_token}"},
@@ -239,18 +251,22 @@ class TestChassis:
 
     def fetch_test(self, *args):
         """
-
+        Test fetch and filter. Test cases:
+        1. Authorization test if guest or admin token are supplied
+        2. ACL test if guest token is present
+        3. Validation Test (Including unique fields and rel_fields tests if provided)
+        4. Success Tests
         """
-        id__ = args[0].id
+        entity_id = getattr(args[0], self.get_primary_key(args[0]).name)
         payload = getattr(args[0], "_sa_instance_state").object.__dict__
         if self.admin_token or self.guest_token:
             response = self.client.get(self.endpoint)
-            # self.test_case.assertEqual(response.status_code, 401,
-            #                            f"{self.resource_name} fetch authorization test.")
+            self.test_case.assertEqual(response.status_code, 401,
+                                       f"{self.resource_name} fetch authorization test.")
         if self.guest_token:
             response = self.client.get(self.endpoint, headers={"Authorization": f"Bearer {self.guest_token}"})
-            # self.test_case.assertEqual(response.status_code, 403,
-            #                            f"{self.resource_name} fetch ACL test.")
+            self.test_case.assertEqual(response.status_code, 403,
+                                       f"{self.resource_name} fetch ACL test.")
 
         if self.admin_token:
             response = self.client.get(f"{self.endpoint}",
@@ -269,6 +285,7 @@ class TestChassis:
         primary_column = None
         from sqlalchemy.sql.sqltypes import Integer, String
         for column in getattr(args[0], "__table__").c:
+            query = urllib.parse.urlencode({column.name: payload.get(column.name)})
             if column.primary_key:
                 primary_column = column
             elif column.name == "created_at":  # Found date time column applying date filter
@@ -276,26 +293,27 @@ class TestChassis:
             elif column.name == "updated_at":
                 self.handle_update_at_test(len(args))
             elif isinstance(column.type, Integer) and payload.get(column.name):
+                query2 = urllib.parse.urlencode({column.name: "-999999999"})
                 if self.admin_token:
-                    response = self.client.get(f"{self.endpoint}?{column.name}={payload.get(column.name)}",
+                    response = self.client.get(f"{self.endpoint}?{query}",
                                                headers={"Authorization": f"Bearer {self.admin_token}"})
-                    response2 = self.client.get(f"{self.endpoint}?{column.name}=-999999999",
+                    response2 = self.client.get(f"{self.endpoint}?{query2}",
                                                 headers={"Authorization": f"Bearer {self.admin_token}"})
                 else:
-                    response = self.client.get(f"{self.endpoint}?{column.name}={payload.get(column.name)}")
-                    response2 = self.client.get(f"{self.endpoint}?{column.name}=-999999999")
+                    response = self.client.get(f"{self.endpoint}?{query}")
+                    response2 = self.client.get(f"{self.endpoint}?{query2}")
                 self.test_case.assertTrue((response.json.get("count") >= 1),
                                           f"Fetch {self.resource_name} test verify {column.name} count")
                 self.test_case.assertEqual(response2.json.get("count"), 0,
                                            f"Fetch {self.resource_name} test verify {column.name} count")
             elif isinstance(column.type, String) and payload.get(column.name) is not None:
                 if self.admin_token:
-                    response = self.client.get(f"{self.endpoint}?{column.name}={payload.get(column.name)}",
+                    response = self.client.get(f"{self.endpoint}?{query}",
                                                headers={"Authorization": f"Bearer {self.admin_token}"})
                     response2 = self.client.get(f"{self.endpoint}?{column.name}={str(uuid.uuid4())}",
                                                 headers={"Authorization": f"Bearer {self.admin_token}"})
                 else:
-                    response = self.client.get(f"{self.endpoint}?{column.name}={payload.get(column.name)}")
+                    response = self.client.get(f"{self.endpoint}?{query}")
                     response2 = self.client.get(f"{self.endpoint}?{column.name}={str(uuid.uuid4())}",
                                                 headers={"Authorization": f"Bearer {self.admin_token}"})
                 self.test_case.assertTrue((response.json.get("count") >= 1),

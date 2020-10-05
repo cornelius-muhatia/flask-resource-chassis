@@ -34,6 +34,27 @@ app = Flask(__name__)
 db = SQLAlchemy(app)
 marshmallow = Marshmallow(app)
 
+@app.errorhandler(401)
+@app.errorhandler(InvalidTokenError)
+def unauthorized(error):
+    # traceback.print_exc()
+    app.logger.error("Authorization error: %s", error)
+    return {"message": "You are not authorized to perform this request. "
+                       "Ensure you have a valid credentials before trying again"}, 401
+
+
+@app.errorhandler(AccessDeniedError)
+def access_denied(error):
+    app.logger.error("Access denied error: %s", error)
+    return {"message": "Sorry you don't have sufficient permissions to access this resource"}, 403
+
+
+@app.errorhandler(InsufficientScopeError)
+def scope_access_denied(error):
+    app.logger.error("Access denied error: %s", error)
+    return {"message": "The access token has insufficient scopes to access resource. "
+                       "Ensure the Oauth2 client as the required scope"}, 403
+
 
 class Gender(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -198,24 +219,7 @@ docs.register(PersonApiList)
 docs.register(PersonApi)
 
 
-@app.errorhandler(InvalidTokenError)
-def unauthorized(error):
-    app.logger.error("Authorization error: %s", error)
-    return {"message": "You are not authorized to perform this request. "
-                       "Ensure you have a valid credentials before trying again"}, 401
 
-
-@app.errorhandler(AccessDeniedError)
-def access_denied(error):
-    app.logger.error("Access denied error: %s", error)
-    return {"message": "Sorry you don't have sufficient permissions to access this resource"}, 403
-
-
-@app.errorhandler(InsufficientScopeError)
-def scope_access_denied(error):
-    app.logger.error("Access denied error: %s", error)
-    return {"message": "The access token has insufficient scopes to access resource. "
-                       "Ensure the Oauth2 client as the required scope"}, 403
 
 
 if __name__ == '__main__':
