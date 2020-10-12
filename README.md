@@ -15,6 +15,7 @@ Extends flask restful api. Actions supported include:
 - [Authorization and Authentication](#authorization-and-authentication)
     - [Scope and Permission Definition](#scopes-and-permission-definition)
 - [Audit Logs](#audit-logs)
+- [Publish Library](#publishing-to-pypi-repository)
 
 ## Installation
 Installation with pip
@@ -231,3 +232,15 @@ class PersonApiList(ChassisResourceList):
 
 ## Audit Logs
 For audit logs implement `LoggerService`  class. An example can be found in the [demo](demo)
+
+## Publishing to pypi repository
+- Specify release version in [setup.py](setup.py) file.
+- Build release files using the following command:
+    ```
+  python setup.py sdist
+  ```
+  Release files will be saved in dist/ folder
+- Upload distribution to [pypi repository](https://pypi.org):
+    ``` 
+  twine upload dist/*
+  ```
