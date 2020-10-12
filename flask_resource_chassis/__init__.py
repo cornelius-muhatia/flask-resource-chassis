@@ -364,7 +364,7 @@ class ChassisResource(MethodResource):
             if self.logger_service:
                 self.logger_service.log_success_update(f"Updated {self.record_name} successfully",
                                                        payload.__class__, record_id, token=token)
-            return record
+            return record, 200
         except (ConflictError, ValidationError) as ex:
             if self.logger_service:
                 self.logger_service.log_failed_update(f"Failed to update {self.record_name}. {ex.message}",
