@@ -4,6 +4,7 @@ import unittest
 import urllib.parse
 import uuid
 from abc import ABC
+from collections import Iterable
 from datetime import datetime, timedelta
 
 import requests
@@ -163,26 +164,33 @@ class TestChassis:
         self.resource_name = schema.Meta.model.__name__
         self.endpoint = endpoint
 
-    @staticmethod
-    def get_primary_key(entity):
+    def get_primary_key(self, entity=None):
         """
         Gets primary key column from entity
         :param entity: SqlAlchemy model
         :return: SqlAlchemy Column
         """
+        if entity is None:
+            entity = self.schema.Meta.model
         for column in getattr(entity, "__table__").c:
             if column.primary_key:
                 return column
         return None
 
-    def creation_test(self, payload, unique_fields=None, rel_fields=None):
+    def creation_test(self, payload, unique_fields=None, rel_fields=None, many_to_many_fields=None):
         """
         Record creation tests. Unit tests:
         1. Authorization test if guest or admin token are supplied
         2. ACL test if guest token is present
         3. Validation Test (Including unique fields and rel_fields tests if provided)
         4. Success Tests
+
+        :param payload: Request payload
+        :param unique_fields: Unique fields
+        :param rel_fields: Relational fields
+        :param many_to_many_fields: Many to many fields
         """
+        primary_column = self.get_primary_key()
         if self.admin_token or self.guest_token:
             response = self.client.post(self.endpoint,
                                         content_type='application/json',
@@ -216,10 +224,17 @@ class TestChassis:
                                        content_type='application/json')
         self.test_case.assertEqual(response.status_code, 200,
                                    f"{self.resource_name} fetch single record success test.")
+        filters = {primary_column.name: response.json.get(primary_column.name)}
+        db_entity = self.schema.Meta.model.query.filter_by(**filters)
         for key, value in payload.items():
-            if hasattr(self.schema.Meta, "load_only"):
+            if isinstance(value, Iterable) and not isinstance(value, str):
+                pass
+            elif hasattr(self.schema.Meta, "load_only"):
                 if key not in self.schema.Meta.load_only:
                     self.test_case.assertEqual(value, response.json.get(key),
+                                               f"{self.resource_name} {key} verification")
+                else:
+                    self.test_case.assertEqual(value, getattr(db_entity, key),
                                                f"{self.resource_name} {key} verification")
             else:
                 self.test_case.assertEqual(value, response.json.get(key), f"{self.resource_name} {key} verification")
