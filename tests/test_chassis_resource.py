@@ -17,17 +17,17 @@ from unittest import TestCase
 
 from authlib.oauth2.rfc6750 import InvalidTokenError
 from flask import Flask, json
-from flask_resource_chassis.tests import test_app, Person, db, Gender
+from flask_resource_chassis.tests import flask_test_app, Person, db, Gender, Country
 
 
 class TestResourceChassis(TestCase):
 
     def setUp(self):
-        self.client = test_app.test_client()
+        self.client = flask_test_app.test_client()
 
-        @test_app.errorhandler(InvalidTokenError)
+        @flask_test_app.errorhandler(InvalidTokenError)
         def unauthorized(error):
-            test_app.logger.error("Authorization error: %s", error)
+            flask_test_app.logger.error("Authorization error: %s", error)
             return {"message": "You are not authorized to perform this request. "
                                "Ensure you have a valid credentials before trying again"}, 401
 
@@ -47,16 +47,13 @@ class TestResourceChassis(TestCase):
             "national_id": "1123456",
             "location_id": 2
         }
-        try:
-            # Authorization tests
-            response = self.client.post("/v1/person", data=json.dumps(payload), content_type='application/json')
-            # self.fail("Authorization fail test. " + str(response.json) + " status " + str(response.status_code))
-        except InvalidTokenError:
-            pass
+        # Authorization tests
+        response = self.client.post("/v1/person", data=json.dumps(payload), content_type='application/json')
+        self.assertEqual(response.status_code, 401)
         # Test ACL Validation
-        # response = self.client.post("/v1/person", headers={"Authorization": f"Bearer guest_token"},
-        #                             data=json.dumps(payload), content_type='application/json')
-        # self.assertEqual(response.status_code, 403)
+        response = self.client.post("/v1/person", headers={"Authorization": f"Bearer guest_token"},
+                                    data=json.dumps(payload), content_type='application/json')
+        self.assertEqual(response.status_code, 403)
         # Successfully tests
         response = self.client.post("/v1/person", headers={"Authorization": f"Bearer admin_token"},
                                     data=json.dumps(payload), content_type='application/json')
@@ -225,7 +222,7 @@ class TestResourceChassis(TestCase):
         }
         response = self.client.patch(f"/v1/person/{person_id}", data=json.dumps(payload),
                                      content_type='application/json')
-        # self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 401)
         # Successfully tests
         response = self.client.patch(f"/v1/person/{person_id}", headers={"Authorization": f"Bearer admin_token"},
                                      data=json.dumps(payload), content_type='application/json')
@@ -293,5 +290,20 @@ class TestResourceChassis(TestCase):
         # Validation test
         response = self.client.delete("/v1/person/" + str(user_id), headers={"Authorization": f"Bearer admin_token"})
         self.assertEqual(response.status_code, 404)
+
+        # Test entities with is_deleted attribute
+        country = Country()
+        country.country_name = "Kenya"
+        country.iso_code = "KE"
+        db.session.add(country)
+        db.session.commit()
+
+        country_id = country.id
+        response = self.client.delete("/v1/country/" + str(country.id), headers={"Authorization": f"Bearer admin_token"})
+        self.assertEqual(response.status_code, 204, "is_deleted attribute test")
+
+        country = Country.query.filter_by(id=country_id).first()
+        self.assertIsNone(country, "is_deleted attribute verification test")
+
 
 

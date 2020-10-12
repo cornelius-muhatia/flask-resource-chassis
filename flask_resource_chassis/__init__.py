@@ -1,3 +1,5 @@
+import inspect
+
 from flask_apispec import use_kwargs, marshal_with, doc, MethodResource, Ref
 from marshmallow import Schema, fields
 from sqlalchemy import desc, asc, not_, or_, and_
@@ -314,7 +316,11 @@ class ChassisResource(MethodResource):
         for key, value in kwargs.items():
             record_id = value
             break
-        record = self.schema.Meta.model.query.filter_by(id=record_id, is_deleted=False).first()
+        primary_column = get_primary_key(self.schema.Meta.model)
+        filters = {primary_column.name: record_id}
+        if hasattr(self.schema.Meta.model, "is_deleted"):
+            filters["is_deleted"] = False
+        record = self.schema.Meta.model.query.filter_by(**filters).first()
         if record is None:
             self.app.logger.error("Failed to find record with id %s", record_id)
             return {"status": 404, "errors": {"detail": "Record doesn't exist"}}, 404
@@ -382,12 +388,12 @@ class ChassisResource(MethodResource):
         for key, value in kwargs.items():
             record_id = value
             break
-        payload = None
-        for arg in args:
-            if isinstance(self.schema.Meta.model, arg):
-                payload = arg
-                payload.id = record_id
-                break
+        # payload = None
+        # for arg in args:
+        #     if isinstance(self.schema.Meta.model, arg):
+        #         payload = arg
+        #         payload.id = record_id
+        #         break
         self.app.logger.info(f"Deleting {self.record_name} with id %s", record_id)
         token = None
         if self.resource_protector:
@@ -397,12 +403,12 @@ class ChassisResource(MethodResource):
             self.service.delete(record_id)
             if self.logger_service:
                 self.logger_service.log_success_deletion(f"Deleted {self.record_name} successfully",
-                                                         payload.__class__, record_id, token=token)
+                                                         self.schema.Meta.model.__class__, record_id, token=token)
             return {}, 204
         except ValidationError as ex:
             if self.logger_service:
                 self.logger_service.log_failed_deletion(f"Failed to delete {self.record_name}. {ex.message}",
-                                                        payload.__class__, record_id, token=token)
+                                                        self.schema.Meta.model.__class__, record_id, token=token)
             return {"errors": [
                 "Record doesn't exist"
             ], "status": 404}, 404

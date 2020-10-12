@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from collections.abc import Iterable
+
 from sqlalchemy.orm.state import InstanceState
 
 from .exceptions import ValidationError
@@ -148,8 +150,12 @@ class ChassisService:
         if db_entity is None:
             raise ValidationError("Sorry record doesn't exist")
         update_vals = {}
+
         for key, val in entity.__dict__.items():
-            if not isinstance(val, InstanceState) and key != primary_key.name:
+            if isinstance(getattr(entity, key), Iterable) and not isinstance(getattr(entity, key), str):
+                self.app.logger.warn("Found many to many field (%s). Unfortunately current implementation "
+                                     "doesn't support many to many fields update", getattr(entity, key))
+            elif not isinstance(val, InstanceState) and key != primary_key.name:
                 update_vals[key] = val
         # filters
         stm = entity.__table__.update().values(**update_vals).where(
@@ -164,8 +170,15 @@ class ChassisService:
         :param record_id: Record id
         """
         self.app.logger.debug("Deleting record. Record id %s", str(record_id))
-        record = self.entity.query.filter_by(id=record_id, is_deleted=False).first()
+        primary_column = get_primary_key(self.entity)
+        filters = {primary_column.name: record_id}
+        if hasattr(self.entity, "is_deleted"):
+            filters["is_deleted"] = False
+        record = self.entity.query.filter_by(**filters).first()
         if record is None:
             raise ValidationError("Record doesn't exist")
-        record.is_deleted = True
+        if hasattr(self.entity, "is_deleted"):
+            record.is_deleted = True
+        else:
+            self.db.session.delete(record)
         self.db.session.commit()

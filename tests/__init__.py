@@ -17,11 +17,11 @@ from flask_resource_chassis.flask_resource_chassis.exceptions import AccessDenie
 from flask_resource_chassis.flask_resource_chassis.utils import validation_error_handler, CustomResourceProtector, \
     RemoteToken
 
-test_app = Flask(__name__)
+flask_test_app = Flask(__name__)
 
-db = SQLAlchemy(test_app)
+db = SQLAlchemy(flask_test_app)
 
-marshmallow = Marshmallow(test_app)
+marshmallow = Marshmallow(flask_test_app)
 
 
 class Location(db.Model):
@@ -52,6 +52,12 @@ class Person(db.Model):
     location_id = db.Column(db.Integer, db.ForeignKey(Location.id, ondelete='RESTRICT'), doc="Location")
 
     gender = db.relationship('Gender')
+
+
+class Country(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    country_name = db.Column(db.String(254), nullable=False)
+    iso_code = db.Column(db.String(2), nullable=False)
 
 
 @event.listens_for(Gender.__table__, 'after_create')
@@ -106,11 +112,18 @@ class PersonSchema(marshmallow.SQLAlchemyAutoSchema):
         include_fk = True
 
 
+class CountrySchema(marshmallow.SQLAlchemyAutoSchema):
+    class Meta:
+        model = Country
+        load_instance = True
+        include_fk = True
+
+
 @doc(tags=["Test Resource"])
 class TestApiList(ChassisResourceList):
 
     def __init__(self):
-        super().__init__(test_app, db, PersonSchema, "Test Resource", resource_protector=resource_protector,
+        super().__init__(flask_test_app, db, PersonSchema, "Test Resource", resource_protector=resource_protector,
                          create_scope=Scope(scopes="create"), create_permissions=["can_create"],
                          fetch_scope=Scope(scopes="read create", operator="OR"))
 
@@ -119,18 +132,39 @@ class TestApiList(ChassisResourceList):
 class TestApi(ChassisResource):
 
     def __init__(self):
-        super().__init__(test_app, db, PersonSchema, "Test Resource", resource_protector=resource_protector,
+        super().__init__(flask_test_app, db, PersonSchema, "Test Resource", resource_protector=resource_protector,
+                         update_scope=Scope(scopes="update"), delete_scope=Scope(scopes="delete"),
+                         delete_permissions=["can_delete"], update_permissions=["can_update"],
+                         fetch_scope=Scope(scopes="read update delete", operator="OR"))
+
+
+@doc(tags=["Test Country Resource"])
+class TestCountryList(ChassisResourceList):
+
+    def __init__(self):
+        super().__init__(flask_test_app, db, CountrySchema, "Country Resource", resource_protector=resource_protector,
+                         create_scope=Scope(scopes="create"), create_permissions=["can_create"],
+                         fetch_scope=Scope(scopes="read create", operator="OR"))
+
+
+@doc(tags=["Test Country Resource"])
+class TestCountryApi(ChassisResource):
+
+    def __init__(self):
+        super().__init__(flask_test_app, db, CountrySchema, "Country Resource", resource_protector=resource_protector,
                          update_scope=Scope(scopes="update"), delete_scope=Scope(scopes="delete"),
                          delete_permissions=["can_delete"], update_permissions=["can_update"],
                          fetch_scope=Scope(scopes="read update delete", operator="OR"))
 
 
 # Restful api configuration
-api = Api(test_app)
+api = Api(flask_test_app)
 api.add_resource(TestApiList, "/v1/person")
 api.add_resource(TestApi, "/v1/person/<int:id>")
+api.add_resource(TestCountryList, "/v1/country")
+api.add_resource(TestCountryApi, "/v1/country/<int:id>")
 # Swagger documentation configuration
-test_app.config.update({
+flask_test_app.config.update({
     'APISPEC_SPEC': APISpec(
         title='Test Chassis Service',
         version='1.0.0-b1',
@@ -147,28 +181,33 @@ test_app.config.update({
     ),
     'APISPEC_SWAGGER_URL': '/swagger/',
 })
-docs = FlaskApiSpec(test_app)
+docs = FlaskApiSpec(flask_test_app)
 docs.register(TestApiList)
 docs.register(TestApi)
+docs.register(TestCountryList)
+docs.register(TestCountryApi)
 
-test_app.register_error_handler(422, validation_error_handler)
+flask_test_app.register_error_handler(422, validation_error_handler)
 
 
-@test_app.errorhandler(InvalidTokenError)
+@flask_test_app.errorhandler(InvalidTokenError)
 def unauthorized(error):
-    test_app.logger.error("Authorization error: %s", error)
+    flask_test_app.logger.error("Authorization error: %s", error)
     return {"message": "You are not authorized to perform this request. "
                        "Ensure you have a valid credentials before trying again"}, 401
 
 
-@test_app.errorhandler(AccessDeniedError)
+@flask_test_app.errorhandler(AccessDeniedError)
 def access_denied(error):
-    test_app.logger.error("Access denied error: %s", error)
+    flask_test_app.logger.error("Access denied error: %s", error)
     return {"message": "Sorry you don't have sufficient permissions to access this resource"}, 403
 
 
-@test_app.errorhandler(InsufficientScopeError)
+@flask_test_app.errorhandler(InsufficientScopeError)
 def scope_access_denied(error):
-    test_app.logger.error("Access denied error: %s", error)
+    flask_test_app.logger.error("Access denied error: %s", error)
     return {"message": "The access token has insufficient scopes to access resource. "
                        "Ensure the Oauth2 client as the required scope"}, 403
+
+
+flask_test_app.testing = True
