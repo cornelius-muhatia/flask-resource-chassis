@@ -25,12 +25,6 @@ class TestResourceChassis(TestCase):
     def setUp(self):
         self.client = flask_test_app.test_client()
 
-        @flask_test_app.errorhandler(InvalidTokenError)
-        def unauthorized(error):
-            flask_test_app.logger.error("Authorization error: %s", error)
-            return {"message": "You are not authorized to perform this request. "
-                               "Ensure you have a valid credentials before trying again"}, 401
-
     def test_creation(self):
         """
         Tests chassis resource creation action. Test cases include:
@@ -97,10 +91,10 @@ class TestResourceChassis(TestCase):
             1. Filter using fields
             2. Filter using date range (created_at and updated_at)
         """
-        # response = self.client.get("/v1/person/1")
-        # self.assertEqual(response.status_code, 401)
-        # response = self.client.get("/v1/person/1", headers={"Authorization": f"Bearer guest_token"})
-        # self.assertEqual(response.status_code, 403)
+        response = self.client.get("/v1/person/1")
+        self.assertEqual(response.status_code, 401, "Test authorization test")
+        response = self.client.get("/v1/person/1", headers={"Authorization": f"Bearer guest_token"})
+        self.assertEqual(response.status_code, 403, "Test ACL tests")
         response = self.client.get("/v1/person/1", headers={"Authorization": f"Bearer admin_token"})
         self.assertEqual(response.status_code, 200)
         self.assertIsNotNone(response.json.get("created_at"))
@@ -220,9 +214,14 @@ class TestResourceChassis(TestCase):
             "national_id": "900000",
             "location_id": 1
         }
+        # Test authorization tests
         response = self.client.patch(f"/v1/person/{person_id}", data=json.dumps(payload),
                                      content_type='application/json')
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 401, "Resource update authorization test")
+        # Test ACL tests
+        response = self.client.patch(f"/v1/person/{person_id}", headers={"Authorization": f"Bearer guest_token"},
+                                     data=json.dumps(payload), content_type='application/json')
+        self.assertEqual(response.status_code, 403, "Resource update acl test")
         # Successfully tests
         response = self.client.patch(f"/v1/person/{person_id}", headers={"Authorization": f"Bearer admin_token"},
                                      data=json.dumps(payload), content_type='application/json')
@@ -271,8 +270,18 @@ class TestResourceChassis(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_deletion(self):
+        """
+        Tests resource deletions. Tests:
+        1. Authorization test
+        2. Access control tests
+        3. Successful tests for both entities with and without is_deleted attribute
+        """
+        # Test authorization
         response = self.client.delete("/v1/person/1")
-        # self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 401)
+        # Test ACL
+        response = self.client.delete("/v1/person/1", headers={"Authorization": f"Bearer guest_token"})
+        self.assertEqual(response.status_code, 403)
         # Validation tests
         response = self.client.delete("/v1/person/-4", headers={"Authorization": f"Bearer admin_token"})
         self.assertEqual(response.status_code, 404)
