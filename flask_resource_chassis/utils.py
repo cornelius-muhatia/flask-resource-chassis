@@ -177,7 +177,7 @@ class TestChassis:
                 return column
         return None
 
-    def creation_test(self, payload, unique_fields=None, rel_fields=None, many_to_many_fields=None):
+    def creation_test(self, payload, unique_fields=None, rel_fields=None):
         """
         Record creation tests. Unit tests:
         1. Authorization test if guest or admin token are supplied
@@ -188,7 +188,6 @@ class TestChassis:
         :param payload: Request payload
         :param unique_fields: Unique fields
         :param rel_fields: Relational fields
-        :param many_to_many_fields: Many to many fields
         """
         primary_column = self.get_primary_key()
         if self.admin_token or self.guest_token:
@@ -418,6 +417,66 @@ class TestChassis:
                                    f"{self.resource_name} Updated before " + str(response.json))
         self.test_case.assertEqual(response.json.get("count"), 0)
         self.test_case.assertEqual(response.json.get("current_page"), 1)
+
+    def updated_test(self, record_id, payload):
+        """
+        Handles update tests. Tests include:
+        1. Authorization tests
+        2. ACL tests
+        3. Required field validation requests
+        """
+        if self.admin_token or self.guest_token:
+            response = self.client.patch(self.endpoint + str(record_id) + "/",
+                                         content_type='application/json',
+                                         data=json.dumps(payload))
+            self.test_case.assertEqual(response.status_code, 401,
+                                       f"{self.resource_name} update authorization test. {str(response.json)}")
+        if self.guest_token:
+            response = self.client.patch(self.endpoint + str(record_id) + "/",
+                                         headers={"Authorization": f"Bearer {self.guest_token}"},
+                                         content_type='application/json',
+                                         data=json.dumps(payload))
+            self.test_case.assertEqual(response.status_code, 403,
+                                       f"{self.resource_name} update ACL test.")
+        self.validation_test(payload, record_id)
+        if self.admin_token:
+            response = self.client.patch(self.endpoint + str(record_id) + "/",
+                                         headers={"Authorization": f"Bearer {self.admin_token}"},
+                                         content_type='application/json',
+                                         data=json.dumps(payload))
+        else:
+            response = self.client.patch(self.endpoint + str(record_id) + "/",
+                                         content_type='application/json',
+                                         data=json.dumps(payload))
+        self.test_case.assertEqual(response.status_code, 200,
+                                   f"{self.resource_name} update success test.")
+
+    def validation_test(self, payload, record_id=None):
+        """
+        Handles the following validation:
+        1. Required fields
+        :param payload: A dictionary of valid payload
+        :param record_id: If provided
+        """
+        for key, field in self.schema._declared_fields.items():
+            if not field.dump_only:
+                if field.required:
+                    payload2 = payload.copy()
+                    if record_id:
+                        payload2.pop(key)
+                        if self.admin_token:
+                            response = self.client.patch(self.endpoint + str(record_id) + "/",
+                                                         headers={"Authorization": f"Bearer {self.admin_token}"},
+                                                         content_type='application/json',
+                                                         data=json.dumps(payload2))
+                        else:
+                            response = self.client.patch(self.endpoint + str(record_id) + "/",
+                                                         content_type='application/json',
+                                                         data=json.dumps(payload2))
+                        self.test_case.assertEqual(response.status_code, 400,
+                                                   f"{self.resource_name} update {key} field required validation test.")
+                        if key == 'age':
+                            self.test_case.fail(f"Response {key}: {response.json}")
 
 
 class GUID(TypeDecorator):
