@@ -189,7 +189,6 @@ class TestChassis:
         :param unique_fields: Unique fields
         :param rel_fields: Relational fields
         """
-        primary_column = self.get_primary_key()
         if self.admin_token or self.guest_token:
             response = self.client.post(self.endpoint,
                                         content_type='application/json',
@@ -223,20 +222,7 @@ class TestChassis:
                                        content_type='application/json')
         self.test_case.assertEqual(response.status_code, 200,
                                    f"{self.resource_name} fetch single record success test.")
-        filters = {primary_column.name: response.json.get(primary_column.name)}
-        db_entity = self.schema.Meta.model.query.filter_by(**filters)
-        for key, value in payload.items():
-            if isinstance(value, Iterable) and not isinstance(value, str):
-                pass
-            elif hasattr(self.schema.Meta, "load_only"):
-                if key not in self.schema.Meta.load_only:
-                    self.test_case.assertEqual(value, response.json.get(key),
-                                               f"{self.resource_name} {key} verification")
-                else:
-                    self.test_case.assertEqual(value, getattr(db_entity, key),
-                                               f"{self.resource_name} {key} verification")
-            else:
-                self.test_case.assertEqual(value, response.json.get(key), f"{self.resource_name} {key} verification")
+        self.verify_fields(payload, response)
 
         if unique_fields:
             if self.admin_token:
@@ -251,7 +237,7 @@ class TestChassis:
             self.test_case.assertEqual(response.status_code, 400, f"{self.resource_name} creation unique test.")
         if rel_fields:
             for rel_field in rel_fields:
-                payload2 = payload
+                payload2 = payload.copy()
                 if is_valid_uuid(rel_field):
                     payload2[rel_field] = str(uuid.uuid4())
                 else:
@@ -418,12 +404,39 @@ class TestChassis:
         self.test_case.assertEqual(response.json.get("count"), 0)
         self.test_case.assertEqual(response.json.get("current_page"), 1)
 
-    def updated_test(self, record_id, payload):
+    def verify_fields(self, payload, response):
+        """
+        Verify payload fields against response field or saved database entity
+
+        :param payload: Request json payload
+        :param response: Request json response
+        """
+        primary_column = self.get_primary_key()
+        filters = {primary_column.name: response.json.get(primary_column.name)}
+        db_entity = self.schema.Meta.model.query.filter_by(**filters).first()
+        for key, value in payload.items():
+            if isinstance(value, Iterable) and not isinstance(value, str):
+                pass
+            elif hasattr(self.schema.Meta, "load_only"):
+                if key not in self.schema.Meta.load_only:
+                    self.test_case.assertEqual(value, response.json.get(key),
+                                               f"{self.resource_name} {key} verification")
+                else:
+                    self.test_case.assertEqual(value, getattr(db_entity, key),
+                                               f"{self.resource_name} {key} verification")
+            else:
+                self.test_case.assertEqual(value, response.json.get(key), f"{self.resource_name} {key} verification")
+
+    def updated_test(self, record_id, payload, rel_fields=None):
         """
         Handles update tests. Tests include:
         1. Authorization tests
         2. ACL tests
-        3. Required field validation requests
+        3. Required field and foreign key validation tests
+
+        :param record_id: Record id
+        :param payload: Request payload
+        :param rel_fields: Relational fields
         """
         if self.admin_token or self.guest_token:
             response = self.client.patch(self.endpoint + str(record_id) + "/",
@@ -450,6 +463,21 @@ class TestChassis:
                                          data=json.dumps(payload))
         self.test_case.assertEqual(response.status_code, 200,
                                    f"{self.resource_name} update success test.")
+        self.verify_fields(payload, response)
+
+        if rel_fields:
+            for rel_field in rel_fields:
+                payload2 = payload.copy()
+                if is_valid_uuid(rel_field):
+                    payload2[rel_field] = str(uuid.uuid4())
+                else:
+                    payload2[rel_field] = 34111
+                response = self.client.patch(self.endpoint + str(record_id) + "/",
+                                             headers={"Authorization": f"Bearer {self.admin_token}"},
+                                             content_type='application/json',
+                                             data=json.dumps(payload2))
+                self.test_case.assertEqual(response.status_code, 400,
+                                           f"{self.resource_name} creation {rel_field} validation test.")
 
     def validation_test(self, payload, record_id=None):
         """
@@ -478,6 +506,37 @@ class TestChassis:
                         if key == 'age':
                             self.test_case.fail(f"Response {key}: {response.json}")
 
+    def deletion_test(self, record_id):
+        if self.admin_token or self.guest_token:
+            response = self.client.delete(self.endpoint + str(record_id) + "/",
+                                          content_type='application/json')
+            self.test_case.assertEqual(response.status_code, 401,
+                                       f"{self.resource_name} delete authorization test. {str(response.json)}")
+        if self.guest_token:
+            response = self.client.delete(self.endpoint + str(record_id) + "/",
+                                          headers={"Authorization": f"Bearer {self.guest_token}"},
+                                          content_type='application/json')
+            self.test_case.assertEqual(response.status_code, 403,
+                                       f"{self.resource_name} delete ACL test.")
+        if self.admin_token:
+            response = self.client.delete(self.endpoint + str(record_id) + "/",
+                                          headers={"Authorization": f"Bearer {self.admin_token}"},
+                                          content_type='application/json')
+        else:
+            response = self.client.delete(self.endpoint + str(record_id) + "/",
+                                          content_type='application/json')
+        self.test_case.assertEqual(response.status_code, 204,
+                                   f"{self.resource_name} delete success test.")
+        # Verify record has been deleted
+        if self.admin_token:
+            response = self.client.get(f"{self.endpoint}{record_id}/",
+                                       headers={"Authorization": f"Bearer {self.admin_token}"},
+                                       content_type='application/json')
+        else:
+            response = self.client.get(f"{self.endpoint}{record_id}/",
+                                       content_type='application/json')
+        self.test_case.assertEqual(response.status_code, 404,
+                                   f"{self.resource_name} verify deletion.")
 
 class GUID(TypeDecorator):
     """Platform-independent GUID type.

@@ -162,7 +162,8 @@ class ChassisService:
             primary_key == model_id)
         self.db.session.execute(stm)
         self.db.session.commit()
-        return db_entity
+        # Reload entity again after update
+        return self.db.session.query(entity.__table__).filter_by(**filters).first()
 
     def delete(self, record_id):
         """
