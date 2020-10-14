@@ -489,7 +489,7 @@ class TestChassis:
         :param record_id: If provided
         """
         for key, field in self.schema._declared_fields.items():
-            if not field.dump_only:
+            if field and not field.dump_only:
                 if field.required:
                     payload2 = payload.copy()
                     if record_id:
@@ -563,14 +563,16 @@ class GUID(TypeDecorator):
     def process_bind_param(self, value, dialect):
         if value is None:
             return value
-        elif dialect.name == 'postgresql':
-            return str(value)
         else:
-            if not isinstance(value, uuid.UUID):
-                return "%.32x" % uuid.UUID(value).int
-            else:
-                # hexstring
-                return "%.32x" % value.int
+            return str(value)
+        # elif dialect.name == 'postgresql':
+        #     return str(value)
+        # else:
+        #     if not isinstance(value, uuid.UUID):
+        #         return "%.32x" % uuid.UUID(value).int
+        #     else:
+        #         # hexstring
+        #         return "%.32x" % value.int
 
     def process_result_value(self, value, dialect):
         if value is None:
