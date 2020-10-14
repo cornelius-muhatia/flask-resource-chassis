@@ -256,6 +256,8 @@ class TestChassis:
         2. ACL test if guest token is present
         3. Validation Test (Including unique fields and rel_fields tests if provided)
         4. Success Tests
+
+        :param args: Models arguments
         """
         entity_id = getattr(args[0], self.get_primary_key(args[0]).name)
         payload = getattr(args[0], "_sa_instance_state").object.__dict__
