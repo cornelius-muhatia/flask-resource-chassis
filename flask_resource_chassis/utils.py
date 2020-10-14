@@ -507,6 +507,13 @@ class TestChassis:
                             self.test_case.fail(f"Response {key}: {response.json}")
 
     def deletion_test(self, record_id):
+        """
+        Handles deletion tests. Test cases include:
+        1. Authorization rest if admin token is specified
+        2. Access control test if guest token is specified
+        3. Deletion success request and verification
+        :param record_id: record id of an existing record
+        """
         if self.admin_token or self.guest_token:
             response = self.client.delete(self.endpoint + str(record_id) + "/",
                                           content_type='application/json')
