@@ -216,7 +216,10 @@ class ChassisResourceList(MethodResource):
         if self.resource_protector:
             self.app.logger.debug("Resource protector is present handling authorization")
             authenticate(self.resource_protector, self.fetch_scopes, self.fetch_permissions)
-        query = self.schema.Meta.model.query.filter_by(is_deleted=False)
+        if hasattr(self.schema.Meta.model, "is_deleted"):
+            query = self.schema.Meta.model.query.filter_by(is_deleted=False)
+        else:
+            query = self.schema.Meta.model.query
         # If q param exists search columns using q param
         if q:
             self.app.logger.debug("Found query param searching columns...")
