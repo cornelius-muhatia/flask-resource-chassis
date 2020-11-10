@@ -214,11 +214,11 @@ class TestChassis:
         self.test_case.assertEqual(response.status_code, 201,
                                    f"{self.resource_name} creation success test.")
         if self.admin_token:
-            response = self.client.get(f"{self.endpoint}{response.json.get('id')}/",
+            response = self.client.get(f"{self.endpoint}/{response.json.get('id')}",
                                        headers={"Authorization": f"Bearer {self.admin_token}"},
                                        content_type='application/json')
         else:
-            response = self.client.get(f"{self.endpoint}{response.json.get('id')}/",
+            response = self.client.get(f"{self.endpoint}/{response.json.get('id')}",
                                        content_type='application/json')
         self.test_case.assertEqual(response.status_code, 200,
                                    f"{self.resource_name} fetch single record success test.")
@@ -443,13 +443,13 @@ class TestChassis:
         :param rel_fields: Relational fields
         """
         if self.admin_token or self.guest_token:
-            response = self.client.patch(self.endpoint + str(record_id) + "/",
+            response = self.client.patch(self.endpoint + "/" + str(record_id),
                                          content_type='application/json',
                                          data=json.dumps(payload))
             self.test_case.assertEqual(response.status_code, 401,
                                        f"{self.resource_name} update authorization test. {str(response.json)}")
         if self.guest_token:
-            response = self.client.patch(self.endpoint + str(record_id) + "/",
+            response = self.client.patch(self.endpoint + "/" + str(record_id),
                                          headers={"Authorization": f"Bearer {self.guest_token}"},
                                          content_type='application/json',
                                          data=json.dumps(payload))
@@ -457,12 +457,12 @@ class TestChassis:
                                        f"{self.resource_name} update ACL test.")
         self.validation_test(payload, record_id)
         if self.admin_token:
-            response = self.client.patch(self.endpoint + str(record_id) + "/",
+            response = self.client.patch(self.endpoint + "/" + str(record_id),
                                          headers={"Authorization": f"Bearer {self.admin_token}"},
                                          content_type='application/json',
                                          data=json.dumps(payload))
         else:
-            response = self.client.patch(self.endpoint + str(record_id) + "/",
+            response = self.client.patch(self.endpoint + "/" + str(record_id),
                                          content_type='application/json',
                                          data=json.dumps(payload))
         self.test_case.assertEqual(response.status_code, 200,
@@ -476,7 +476,7 @@ class TestChassis:
                     payload2[rel_field] = str(uuid.uuid4())
                 else:
                     payload2[rel_field] = 34111
-                response = self.client.patch(self.endpoint + str(record_id) + "/",
+                response = self.client.patch(self.endpoint + "/" + str(record_id),
                                              headers={"Authorization": f"Bearer {self.admin_token}"},
                                              content_type='application/json',
                                              data=json.dumps(payload2))
@@ -497,12 +497,12 @@ class TestChassis:
                     if record_id:
                         payload2.pop(key)
                         if self.admin_token:
-                            response = self.client.patch(self.endpoint + str(record_id) + "/",
+                            response = self.client.patch(self.endpoint + "/" + str(record_id),
                                                          headers={"Authorization": f"Bearer {self.admin_token}"},
                                                          content_type='application/json',
                                                          data=json.dumps(payload2))
                         else:
-                            response = self.client.patch(self.endpoint + str(record_id) + "/",
+                            response = self.client.patch(self.endpoint + "/" + str(record_id),
                                                          content_type='application/json',
                                                          data=json.dumps(payload2))
                         self.test_case.assertEqual(response.status_code, 400,
@@ -519,32 +519,32 @@ class TestChassis:
         :param record_id: record id of an existing record
         """
         if self.admin_token or self.guest_token:
-            response = self.client.delete(self.endpoint + str(record_id) + "/",
+            response = self.client.delete(self.endpoint + "/" + str(record_id),
                                           content_type='application/json')
             self.test_case.assertEqual(response.status_code, 401,
                                        f"{self.resource_name} delete authorization test. {str(response.json)}")
         if self.guest_token:
-            response = self.client.delete(self.endpoint + str(record_id) + "/",
+            response = self.client.delete(self.endpoint + "/" + str(record_id),
                                           headers={"Authorization": f"Bearer {self.guest_token}"},
                                           content_type='application/json')
             self.test_case.assertEqual(response.status_code, 403,
                                        f"{self.resource_name} delete ACL test.")
         if self.admin_token:
-            response = self.client.delete(self.endpoint + str(record_id) + "/",
+            response = self.client.delete(self.endpoint + "/" + str(record_id),
                                           headers={"Authorization": f"Bearer {self.admin_token}"},
                                           content_type='application/json')
         else:
-            response = self.client.delete(self.endpoint + str(record_id) + "/",
+            response = self.client.delete(self.endpoint + "/" + str(record_id),
                                           content_type='application/json')
         self.test_case.assertEqual(response.status_code, 204,
                                    f"{self.resource_name} delete success test.")
         # Verify record has been deleted
         if self.admin_token:
-            response = self.client.get(f"{self.endpoint}{record_id}/",
+            response = self.client.get(f"{self.endpoint}/{record_id}",
                                        headers={"Authorization": f"Bearer {self.admin_token}"},
                                        content_type='application/json')
         else:
-            response = self.client.get(f"{self.endpoint}{record_id}/",
+            response = self.client.get(f"{self.endpoint}/{record_id}",
                                        content_type='application/json')
         self.test_case.assertEqual(response.status_code, 404,
                                    f"{self.resource_name} verify deletion.")
