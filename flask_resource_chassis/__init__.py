@@ -247,8 +247,8 @@ class ChassisResourceList(MethodResource):
             elif updated_after is None:
                 query = query.filter(self.schema.Meta.model.updated_at <= updated_before)
             else:
-                query = query.filter(and_(self.schema.Meta.model.updated_at >= created_after,
-                                          self.schema.Meta.model.updated_at <= created_before))
+                query = query.filter(and_(self.schema.Meta.model.updated_at >= updated_after,
+                                          self.schema.Meta.model.updated_at <= updated_before))
         # Filtering using other columns
         if kwargs:
             query = query.filter_by(**kwargs)

@@ -380,6 +380,16 @@ class TestChassis:
         self.test_case.assertEqual(response.json.get("count"), 0,
                                    f"{self.resource_name} creation date before filter count test")
 
+        if self.admin_token:
+            response = self.client.get(f"{self.endpoint}?created_before=1997-01-01&created_after=1997-01-02",
+                                       headers={"Authorization": f"Bearer {self.admin_token}"})
+        else:
+            response = self.client.get(f"{self.endpoint}?created_before=1997-01-01&created_after=1997-01-02")
+        self.test_case.assertEqual(response.status_code, 200,
+                                   f"{self.resource_name} creation date before and after filter test")
+        self.test_case.assertEqual(response.json.get("count"), 0,
+                                   f"{self.resource_name} creation date before and after filter count test")
+
     def handle_update_at_test(self, entities_count):
         """
         Handle update_at date filter unit tests
@@ -405,6 +415,15 @@ class TestChassis:
                                    f"{self.resource_name} Updated before " + str(response.json))
         self.test_case.assertEqual(response.json.get("count"), 0)
         self.test_case.assertEqual(response.json.get("current_page"), 1)
+        if self.admin_token:
+            response = self.client.get(f"{self.endpoint}?updated_before=1997-01-01&updated_after=1997-01-02",
+                                       headers={"Authorization": f"Bearer {self.admin_token}"})
+        else:
+            response = self.client.get(f"{self.endpoint}?updated_before=1997-01-01&updated_after=1997-01-02")
+        self.test_case.assertEqual(response.status_code, 200,
+                                   f"{self.resource_name} Updated before and after creation date filter test")
+        self.test_case.assertEqual(response.json.get("count"), 0,
+                                   f"{self.resource_name} Updated before and after creation date filter count test")
 
     def verify_fields(self, payload, response):
         """
