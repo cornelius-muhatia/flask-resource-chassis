@@ -82,8 +82,9 @@ class MockRequestsResponse:
 class TestSaslOauthTokenProvider(TestCase):
 
     def setUp(self):
-        self.token_provider = SaslOauthTokenProvider("test_client_id", "test_client_secret",
-                                                     "http://localhost:5002/oauth/token")
+        oauth2_requests = OAuth2Requests("test_client_id", "test_client_secret",
+                                         "http://localhost:5002/oauth/token")
+        self.token_provider = SaslOauthTokenProvider(oauth2_requests)
 
     def test_extensions(self):
         self.assertIsNotNone(self.token_provider.extensions(), "Extensions test")
