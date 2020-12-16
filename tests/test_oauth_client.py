@@ -17,14 +17,10 @@ from unittest.mock import patch
 
 import requests
 
-from flask_resource_chassis.oauth_client import OAuth2Requests
+from flask_resource_chassis.oauth_client import OAuth2Requests, SaslOauthTokenProvider
 
 
 class TestOAuth2Requests(TestCase):
-    #
-    # def setUp(self):
-    #     self.oauth2_requests = OAuth2Requests("test_client_id", "test_client_secret",
-    #                                           "http://localhost:5002/oauth/token")
 
     @patch.object(requests, 'post')
     def test_retrieve_token(self, requests_post):
@@ -78,3 +74,25 @@ class MockRequestsResponse:
 
     def json(self):
         return self.response_dict
+
+    def close(self):
+        print("closed oauth2 request response")
+
+
+class TestSaslOauthTokenProvider(TestCase):
+
+    def setUp(self):
+        self.oauth2_request = OAuth2Requests("test_client_id", "test_client_secret",
+                                             "http://localhost:5002/oauth/token")
+
+    def test_extensions(self):
+        token_provider = SaslOauthTokenProvider(self.oauth2_request)
+        self.assertIsNotNone(token_provider.extensions(), "Extensions test")
+
+    @patch.object(requests, 'post')
+    def test_token(self, requests_post):
+        response = MockRequestsResponse()
+        response.set_response_dict(dict(access_token="test_token", expires_in=6000, scope=""))
+        requests_post.return_value = response
+        token_provider = SaslOauthTokenProvider(self.oauth2_request)
+        self.assertEqual(token_provider.token(), "test_token", "Access token test")

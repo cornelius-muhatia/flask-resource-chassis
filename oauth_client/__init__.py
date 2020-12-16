@@ -18,6 +18,7 @@ import requests
 
 
 class OAuthToken:
+    """ Access token object """
     # Access token string
     token = None
     # Access token scopes
@@ -28,12 +29,25 @@ class OAuthToken:
     issued_at = 0
 
     def is_active(self):
+        """
+        Checks if token is active using issued_at time and token expiry
+        :return: true if active otherwise false
+        """
         return (self.issued_at + self.expires_in) > datetime.timestamp(datetime.utcnow())
 
 
 class OAuth2Requests(requests.Session):
+    """
+    Enables oauth2 bearer token request on requests. Retrieves and refreshes access token automatically
+    """
 
     def __init__(self, oauth_client_id, oauth_client_secret, oauth_url, scopes=None):
+        """
+        :param oauth_client_id: oauth2 client id
+        :param oauth_client_secret: oauth2 client secret
+        :param oauth_url: oauth2 server url
+        :param scopes: Oauth2 scopes
+        """
         super().__init__()
         self.oauth_url = oauth_url
         self.oauth_client_secret = oauth_client_secret
@@ -42,6 +56,12 @@ class OAuth2Requests(requests.Session):
         self.oauth_token = None
 
     def retrieve_access_token(self):
+        """
+        Requests new access token from the authorization server.
+        :raises Exception: In case of http connection error
+        """
+        print(f"ROAuth2Requests: Retrieving a new access token from server "
+              f"{self.oauth_url} for client {self.oauth_client_id}")
         response = requests.post(self.oauth_url, auth=(self.oauth_client_id, self.oauth_client_secret),
                                  data=dict(grant_type="client_credentials", scope=self.scopes))
         if response.ok:
@@ -52,8 +72,11 @@ class OAuth2Requests(requests.Session):
             self.oauth_token.scopes = body.get("scope")
             # Remove 2 seconds to account for connection time
             self.oauth_token.issued_at = datetime.timestamp(datetime.utcnow()) - 2000
+            response.close()
         else:
-            raise Exception(f"Failed to retrieve access token from authorization server. Details: {response.text}")
+            text = response.text
+            response.close()
+            raise Exception(f"Failed to retrieve access token from authorization server. Details: {text}")
 
     def request(
             self,
@@ -89,8 +112,45 @@ class OAuth2Requests(requests.Session):
 
     @property
     def access_token(self):
+        """
+        Gets access token. If token has expired an new one is requested.
+        :return: returns OAuthToken
+        """
         if self.oauth_token and self.oauth_token.is_active():
             return self.oauth_token
         else:
             self.retrieve_access_token()
             return self.oauth_token
+
+
+class SaslOauthTokenProvider:
+    """
+    A Token Provider must be used for the SASL OAuthBearer protocol.
+    """
+
+    def __init__(self, oauth2_client):
+        """
+        :param oauth2_client: Expects an instance of OAuth2Requests
+        """
+        self.oauth2_client = oauth2_client
+
+    def token(self):
+        """
+        Retrieves access token from authorization server
+        :return: access_token
+        :rtype: str
+        """
+        print("Retrieving access token from authorization server for kafka connection")
+        token = self.oauth2_client.access_token.token
+        return token
+
+    def extensions(self):
+        """
+        This is an OPTIONAL method that may be implemented.
+
+        Returns a map of key-value pairs that can
+        be sent with the SASL/OAUTHBEARER initial client request. If
+        not implemented, the values are ignored. This feature is only available
+        in Kafka >= 2.1.0.
+        """
+        return {}
