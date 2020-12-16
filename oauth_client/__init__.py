@@ -60,7 +60,7 @@ class OAuth2Requests(requests.Session):
         Requests new access token from the authorization server.
         :raises Exception: In case of http connection error
         """
-        print(f"ROAuth2Requests: Retrieving a new access token from server "
+        print(f"OAuth2Requests: Retrieving a new access token from server "
               f"{self.oauth_url} for client {self.oauth_client_id}")
         response = requests.post(self.oauth_url, auth=(self.oauth_client_id, self.oauth_client_secret),
                                  data=dict(grant_type="client_credentials", scope=self.scopes))
@@ -128,11 +128,14 @@ class SaslOauthTokenProvider:
     A Token Provider must be used for the SASL OAuthBearer protocol.
     """
 
-    def __init__(self, oauth2_client):
+    def __init__(self, oauth_client_id, oauth_client_secret, oauth_url, scopes=None):
         """
         :param oauth2_client: Expects an instance of OAuth2Requests
         """
-        self.oauth2_client = oauth2_client
+        self.oauth_url = oauth_url
+        self.oauth_client_secret = oauth_client_secret
+        self.oauth_client_id = oauth_client_id
+        self.scopes = scopes
 
     def token(self):
         """
@@ -141,8 +144,16 @@ class SaslOauthTokenProvider:
         :rtype: str
         """
         print("Retrieving access token from authorization server for kafka connection")
-        token = self.oauth2_client.access_token.token
-        return token
+        response = requests.post(self.oauth_url, auth=(self.oauth_client_id, self.oauth_client_secret),
+                                 data=dict(grant_type="client_credentials", scope=self.scopes))
+        if response.ok:
+            body = response.json()
+            response.close()
+            return body.get("access_token")
+        else:
+            text = response.text
+            response.close()
+            raise Exception(f"Failed to retrieve access token from authorization server. Details: {text}")
 
     def extensions(self):
         """
