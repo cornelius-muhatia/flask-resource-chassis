@@ -5,7 +5,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy, Model
 from sqlalchemy import Integer, String, Column, func
 
-from flask_resource_chassis.flask_resource_chassis import ChassisService, ValidationError
+from flask_resource_chassis import ChassisService, ValidationError
 
 
 class Test(Model):

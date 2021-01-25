@@ -17,7 +17,7 @@ from unittest.mock import patch
 
 import requests
 
-from flask_resource_chassis.oauth_client import OAuth2Requests, SaslOauthTokenProvider
+from oauth_client import OAuth2Requests, SaslOauthTokenProvider
 
 
 class TestOAuth2Requests(TestCase):

@@ -12,9 +12,9 @@ from flask_restful import Api
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import event, func, Column, Index
 
-from flask_resource_chassis.flask_resource_chassis import ChassisResourceList, ChassisResource, Scope
-from flask_resource_chassis.flask_resource_chassis.exceptions import AccessDeniedError
-from flask_resource_chassis.flask_resource_chassis.utils import validation_error_handler, CustomResourceProtector, \
+from flask_resource_chassis import ChassisResource, ChassisResourceList, Scope
+from flask_resource_chassis.exceptions import AccessDeniedError
+from flask_resource_chassis.utils import validation_error_handler, CustomResourceProtector, \
     RemoteToken
 
 flask_test_app = Flask(__name__)

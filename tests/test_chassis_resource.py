@@ -17,7 +17,7 @@ from unittest import TestCase
 
 from authlib.oauth2.rfc6750 import InvalidTokenError
 from flask import Flask, json
-from flask_resource_chassis.tests import flask_test_app, Person, db, Gender, Country
+from tests import flask_test_app, Person, db, Gender, Country
 
 
 class TestResourceChassis(TestCase):
