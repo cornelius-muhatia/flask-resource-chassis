@@ -1,5 +1,8 @@
+import base64
 import functools
+import os
 import time
+import traceback
 import unittest
 import urllib.parse
 import uuid
@@ -568,6 +571,7 @@ class TestChassis:
         self.test_case.assertEqual(response.status_code, 404,
                                    f"{self.resource_name} verify deletion.")
 
+
 class GUID(TypeDecorator):
     """Platform-independent GUID type.
     Uses PostgreSQL's UUID type, otherwise uses
@@ -602,3 +606,28 @@ class GUID(TypeDecorator):
             if not isinstance(value, uuid.UUID):
                 value = uuid.UUID(value)
             return value
+
+
+def get_kafka_hosts(consul_url="http://localhost:8500"):
+    """
+    Fetch kafka hosts from consul agent
+    :param consul_url: Consul address
+    """
+    try:
+        response = requests.get(f"{consul_url}/v1/kv/kafka-service-hosts")
+        if response.ok:
+            hosts = base64.decodebytes(response.json()[0].get("Value").encode()).decode()
+            return hosts.split(",")
+        else:
+            raise Exception(f"Failed to retrieve kafka hosts. {response.raw}")
+    except Exception:
+        traceback.print_stack()
+        print("Failed to retrieve kafka hosts from consul agent trying to fetch from "
+              "environment variable KAFKA_SERVICE_HOSTS")
+        kafka_hosts = os.environ.get("KAFKA_SERVICE_HOSTS", None)
+        if kafka_hosts:
+            return kafka_hosts.split(",")
+        else:
+            print("Failed to retrieve kafka hosts from environment variable(KAFKA_SERVICE_HOSTS). "
+                  "Giving up!")
+    return []

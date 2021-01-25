@@ -5,5 +5,5 @@ flask-marshmallow
 pytest
 Authlib
 flask-restful
-requests
-requests
+requests == 2.25.1
+coverage

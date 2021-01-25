@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 import requests
 
-from flask_resource_chassis.utils import get_kafka_hosts
+from flask_resource_chassis.flask_resource_chassis.utils import get_kafka_hosts
 
 
 class MessageServiceTests(TestCase):
