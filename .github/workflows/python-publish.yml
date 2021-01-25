@@ -14,8 +14,8 @@ jobs:
 
     steps:
     - name: Set Image Tag
-        id: tagName
-        run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+      id: tagName
+      run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
     - uses: actions/checkout@v2
     - name: Set up Python
       uses: actions/setup-python@v2
