@@ -37,5 +37,4 @@ jobs:
         PACKAGE_VERSION: ${{ steps.tagName.outputs.VERSION }}
       run: |
         python setup.py sdist bdist_wheel
-        cd /dist
-        ls
+        twine upload dist/*
